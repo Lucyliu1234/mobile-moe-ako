@@ -1,0 +1,13 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Benchmark outputs and logs
+results/runs/
+results/*.jsonl
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+*~

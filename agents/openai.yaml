@@ -1,0 +1,4 @@
+interface:
+  display_name: "MobileMoE AKO"
+  short_description: "Agentic optimization harness for mobile MoE"
+  default_prompt: "Use $mobile-moe-ako to run the AKO-style MobileMoE optimization loop."
