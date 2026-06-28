@@ -9,6 +9,8 @@ Use the S1 instructions plus these system concepts:
 - required miss service latency
 - GPU expert path as optional comparison
 
+For S2 baseline decomposition, you may explicitly interpret benchmark metrics using these concepts. Unlike S1, it is valid to discuss cache/miss behavior, prewarm usefulness, eviction churn, residency, required miss service latency, transfer scheduling, and heterogeneous execution as candidate optimization directions.
+
 If more domain context is needed, read `references/expert_hints/coremoe_required_core.md`.
 
 Prefer hypotheses that explain which diagnostic should move, for example:

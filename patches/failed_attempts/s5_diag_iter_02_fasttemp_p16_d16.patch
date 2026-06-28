@@ -1,0 +1,13 @@
+diff --git a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+index c24aa0df..e751822b 100644
+--- a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
++++ b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+@@ -13914,7 +13914,7 @@ class Qwen2MoeTDRunner {
+   bool hybrid_log_routing_ = false;
+ 	  bool hybrid_gpu_shadow_enabled_ = false;
+ 	  bool hybrid_gpu_log_detail_ = false;
+-  bool hybrid_gpu_core_breakdown_ = false;
++  bool hybrid_gpu_core_breakdown_ = true;
+   bool hybrid_gpu_core_kernel_profile_ = false;
+ 	  bool hybrid_cold_delta_input_ = false;
+ 	  bool hybrid_gpu_cold_delta_enabled_ = false;

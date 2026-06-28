@@ -2,7 +2,45 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-STAGE="${AKO_STAGE:-default}"
+PROFILE="${AKO_BENCH_PROFILE:-}"
+
+DEFAULT_STAGE="default"
+DEFAULT_DATASET="/home/liuxu/projects/results/ds_tilemoe/ds2_cold20_prompts.jsonl"
+DEFAULT_DECODE_TOKENS="8"
+DEFAULT_REPEATS="1"
+DEFAULT_LIMIT="0"
+DEFAULT_IDLE_SECONDS="60"
+DEFAULT_SLEEP_BETWEEN_RUNS_S="300"
+DEFAULT_COOLDOWN_MAX_WAIT_S="1800"
+
+case "${PROFILE}" in
+  day_smoke_p16_d16)
+    DEFAULT_STAGE="day_smoke"
+    DEFAULT_DATASET="${ROOT}/references/datasets/ds2_cold20_prompts_quick_1_p16.jsonl"
+    DEFAULT_DECODE_TOKENS="16"
+    DEFAULT_LIMIT="1"
+    DEFAULT_IDLE_SECONDS="0"
+    DEFAULT_SLEEP_BETWEEN_RUNS_S="0"
+    DEFAULT_COOLDOWN_MAX_WAIT_S="300"
+    ;;
+  day_signal_p32_d32)
+    DEFAULT_STAGE="day_signal"
+    DEFAULT_DATASET="${ROOT}/references/datasets/ds2_cold20_prompts_quick_1_p32.jsonl"
+    DEFAULT_DECODE_TOKENS="32"
+    DEFAULT_LIMIT="1"
+    DEFAULT_IDLE_SECONDS="0"
+    DEFAULT_SLEEP_BETWEEN_RUNS_S="0"
+    DEFAULT_COOLDOWN_MAX_WAIT_S="600"
+    ;;
+  "")
+    ;;
+  *)
+    echo "[profile] unknown AKO_BENCH_PROFILE='${PROFILE}'" >&2
+    exit 2
+    ;;
+esac
+
+STAGE="${AKO_STAGE:-${DEFAULT_STAGE}}"
 ITERATION_ID="${AKO_ITERATION_ID:-${STAGE}_$(date +%Y%m%d_%H%M%S)}"
 CODE_REPO="${AKO_CODE_REPO:-/home/liuxu/projects/MNN}"
 BACKEND="${AKO_BACKEND:-qwen2_td_qnn}"
@@ -32,10 +70,10 @@ if [[ "${compile_success}" -eq 1 ]]; then
     echo "[backend] ${BACKEND_SCRIPT}"
     if ! "${BACKEND_SCRIPT}" \
     --serial "${AKO_SERIAL:-10.29.230.131:5555}" \
-    --dataset "${AKO_DATASET:-/home/liuxu/projects/results/ds_tilemoe/ds2_cold20_prompts.jsonl}" \
-    --decode-tokens "${AKO_DECODE_TOKENS:-8}" \
-    --repeats "${AKO_REPEATS:-1}" \
-    --limit "${AKO_LIMIT:-0}" \
+    --dataset "${AKO_DATASET:-${DEFAULT_DATASET}}" \
+    --decode-tokens "${AKO_DECODE_TOKENS:-${DEFAULT_DECODE_TOKENS}}" \
+    --repeats "${AKO_REPEATS:-${DEFAULT_REPEATS}}" \
+    --limit "${AKO_LIMIT:-${DEFAULT_LIMIT}}" \
     --start-index "${AKO_START_INDEX:-0}" \
     --local-runner "${AKO_LOCAL_RUNNER:-/home/liuxu/projects/mllm/build-android-arm64-v8a/bin/mllm-deepseek-v2-edgemoe-runner}" \
     --push-runner "${AKO_PUSH_RUNNER:-0}" \
@@ -47,9 +85,9 @@ if [[ "${compile_success}" -eq 1 ]]; then
     --no-mbm-prefetch "${AKO_NO_MBM_PREFETCH:-0}" \
     --force-decode "${AKO_FORCE_DECODE:-0}" \
     --force-gguf-dequant-f32 "${AKO_FORCE_GGUF_DEQUANT_F32:-0}" \
-    --idle-seconds "${AKO_IDLE_SECONDS:-60}" \
-    --sleep-between-runs-s "${AKO_SLEEP_BETWEEN_RUNS_S:-300}" \
-    --cooldown-max-wait-s "${AKO_COOLDOWN_MAX_WAIT_S:-1800}" \
+    --idle-seconds "${AKO_IDLE_SECONDS:-${DEFAULT_IDLE_SECONDS}}" \
+    --sleep-between-runs-s "${AKO_SLEEP_BETWEEN_RUNS_S:-${DEFAULT_SLEEP_BETWEEN_RUNS_S}}" \
+    --cooldown-max-wait-s "${AKO_COOLDOWN_MAX_WAIT_S:-${DEFAULT_COOLDOWN_MAX_WAIT_S}}" \
     --out-dir "${OUT_DIR}" \
     "$@"; then
       run_success=0

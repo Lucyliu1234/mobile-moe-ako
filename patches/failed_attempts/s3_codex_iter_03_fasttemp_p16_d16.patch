@@ -1,0 +1,13 @@
+diff --git a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+index c24aa0df..a32f35de 100644
+--- a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
++++ b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+@@ -13935,7 +13935,7 @@ class Qwen2MoeTDRunner {
+   bool hybrid_gpu_async_prewarm_final_decode_ = false;
+ 	  bool hybrid_gpu_async_prewarm_factors_ = false;
+   bool hybrid_gpu_next_layer_prewarm_ = false;
+-  bool hybrid_gpu_resident_recent_ = false;
++  bool hybrid_gpu_resident_recent_ = true;
+   int hybrid_gpu_resident_recent_steps_ = 2;
+   bool hybrid_gpu_prewarm_low_priority_ = false;
+   bool hybrid_gpu_prewarm_no_evict_ = false;

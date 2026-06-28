@@ -22,6 +22,14 @@ Every code-changing round must contain one coherent runtime-policy change tied t
 
 Failed attempts are part of the trajectory. Record and archive compile failures, correctness failures, generated-token mismatches, speed regressions, no-signal changes, wrong file choices, forbidden-surface edits, and hypothesis/metric mismatches.
 
+Baseline decomposition is required before the first source edit in every stage, but its interpretation is stage-bounded. In S1, decomposition is black-box observation of benchmark metrics, logs, and device state; do not supply MoE-specific optimization categories. In S2-S4, decomposition may use the expert concepts or file hints intentionally provided by that stage.
+
+Stage-aware search policy:
+
+- S1: external search is disabled except for benchmark/harness/environment failures. Do not search for MoE-specific optimization mechanisms or read expert hints. Missing domain knowledge is an S1 result.
+- S2-S4: after a stall, search only for mobile MoE/runtime-system material: expert caching, prefetching, transfer scheduling, heterogeneous CPU/GPU/NPU execution, Android thermal benchmarking, Qualcomm QNN/OpenCL behavior, and MoE serving systems. Prefer local project notes, official vendor documentation, and systems papers. Do not perform generic kernel-optimization search unless the chosen file is actually a kernel.
+- Every external source or project note used after a stall must be named in `ITERATIONS.md`, along with whether that knowledge would have violated the current stage's context budget.
+
 ## Stages
 
 ### S0: Baseline Stability
@@ -66,6 +74,34 @@ Do not provide optimization direction or key files. Read `references/prompts/s1_
 Before edits, cite the shared S0 baseline if the contract is unchanged, or run `s1_baseline_01`.
 
 Recommended rounds: 3.
+
+One-day S1 plan:
+
+1. Create or switch to the runtime branch `exp/s1-blackbox-mobile-moe-ako`. Do not edit the runtime main branch directly.
+2. Run a daytime smoke baseline before edits:
+
+```bash
+cd /home/liuxu/projects/mobile-moe-ako
+AKO_CODE_REPO=/home/liuxu/projects/mllm \
+AKO_BENCH_PROFILE=day_smoke_p16_d16 \
+AKO_ITERATION_ID=s1_baseline_day_smoke_p16_d16 \
+bash scripts/agent_bench.sh
+```
+
+3. Analyze the baseline diagnostic decomposition before the first edit using only raw benchmark metrics, logs, and device state. Do not supply MoE-specific interpretations. Missing fields should be recorded as instrumentation gaps.
+4. Run 3 S1 smoke iterations. Each iteration uses `day_smoke_p16_d16`, one hypothesis, one coherent runtime-policy change, immediate `ITERATIONS.md` logging, and commit/archive before the next hypothesis.
+5. Recheck any promising correctness-passing patch with the more credible daytime signal contract:
+
+```bash
+cd /home/liuxu/projects/mobile-moe-ako
+AKO_CODE_REPO=/home/liuxu/projects/mllm \
+AKO_BENCH_PROFILE=day_signal_p32_d32 \
+AKO_ITERATION_ID=s1_iter_XX_day_signal_p32_d32 \
+bash scripts/agent_bench.sh
+```
+
+6. In the evening, compare the original S1 baseline and the best S1 patch with the fixed 4-category verdict contract, for example 4mix prompt32 decode64. Do not use the evening verdict as every-iteration feedback.
+7. S1 external search is disabled unless the benchmark or harness cannot run. Do not read expert hints, S2-S4 prompts, prior human optimization notes, or search for MoE-specific mechanisms. Missing domain knowledge is an S1 finding.
 
 Suggested outputs:
 

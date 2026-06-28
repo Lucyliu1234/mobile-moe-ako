@@ -133,12 +133,13 @@ Read `references/experiment_protocol.md` only if the user affirmatively asks to 
 2. **Create or switch branch.** Use a branch that matches the experiment label and preserves useful commits. If the protocol specifies branch names, follow it.
 3. **Verify baseline contract.** Confirm benchmark inputs, model, decode length, and correctness guardrail are fixed. Do not silently change them to make iteration easier.
 4. **Verify stage baseline.** Before source edits in a stage, run or cite a baseline for the exact same benchmark contract. If the current protocol says no edits, run the harness and log the baseline without inspecting for changes.
-5. **Form a hypothesis before editing.** The hypothesis must name the expected metric movement, e.g. higher `decode_tok_s`, lower `mib_per_token`, lower transfer volume, better cache behavior, or lower scheduling delay.
-6. **Inspect files.** Discover the relevant runtime paths, or start from user-provided candidate files when available. Always verify the call path before editing.
-7. **Make one coherent change.** Keep changes small enough to attribute metric movement to a policy hypothesis. Do not mix unrelated policy, benchmark, logging, parser, and instrumentation changes in one iteration.
-8. **Run the harness.** Use `bash scripts/agent_bench.sh` from the MobileMoE-AKO package, or the equivalent copied into the runtime repo.
-9. **Close the iteration immediately.** Append `ITERATIONS.md` and commit/archive before starting a new hypothesis.
-10. **Compare against baseline and stage best.** Use primary and guardrail metrics, then diagnostics to explain why the attempt worked or failed.
+5. **Analyze baseline diagnostic decomposition.** Before the first source edit in a stage, inspect the baseline benchmark output, metrics, logs, and device state allowed by the stage context. In S1, treat metrics as raw black-box feedback and do not supply MoE-specific interpretations. In S2-S4, expert categories such as cache/miss, prefetch, eviction, residency, transfer scheduling, and heterogeneous execution may be used when the stage prompt allows them. Record the suspected bottleneck and any missing diagnostics in `ITERATIONS.md`.
+6. **Form the first hypothesis from the decomposition.** The first code-changing iteration must name the baseline bottleneck it targets and which metric or diagnostic should move. In S1, the hypothesis must be agent-inferred from benchmark feedback and repo inspection rather than supplied candidate directions. In S2-S4, the hypothesis may use the stage-provided expert concepts or file hints.
+7. **Inspect files.** Discover the relevant runtime paths, or start from user-provided candidate files when available. Always verify the call path before editing.
+8. **Make one coherent change.** Keep changes small enough to attribute metric movement to a policy hypothesis. Do not mix unrelated policy, benchmark, logging, parser, and instrumentation changes in one iteration.
+9. **Run the harness.** Use `bash scripts/agent_bench.sh` from the MobileMoE-AKO package, or the equivalent copied into the runtime repo.
+10. **Close the iteration immediately.** Append `ITERATIONS.md` and commit/archive before starting a new hypothesis.
+11. **Compare against baseline and stage best.** Use primary and guardrail metrics, then diagnostics to explain why the attempt worked or failed.
 
 ## Harness
 
@@ -148,15 +149,22 @@ Default command:
 bash scripts/agent_bench.sh
 ```
 
-Fast smoke command:
+Daytime fast smoke command:
 
 ```bash
-AKO_STAGE=smoke AKO_ITERATION_ID=smoke AKO_LIMIT=1 AKO_REPEATS=1 AKO_IDLE_SECONDS=0 AKO_SLEEP_BETWEEN_RUNS_S=0 bash scripts/agent_bench.sh
+AKO_BENCH_PROFILE=day_smoke_p16_d16 AKO_ITERATION_ID=s1_iter_01 bash scripts/agent_bench.sh
+```
+
+Daytime signal recheck command:
+
+```bash
+AKO_BENCH_PROFILE=day_signal_p32_d32 AKO_ITERATION_ID=s1_iter_01_recheck bash scripts/agent_bench.sh
 ```
 
 Useful environment variables:
 
 - `AKO_STAGE`: experiment group label used for `results/metrics_<stage>.jsonl`
+- `AKO_BENCH_PROFILE`: optional fixed benchmark profile; supported values include `day_smoke_p16_d16` and `day_signal_p32_d32`
 - `AKO_ITERATION_ID`: stable label such as `runtime_iter_01`
 - `AKO_BUILD_CMD`: optional build command run in `AKO_CODE_REPO`
 - `AKO_CODE_REPO`: repo where `AKO_BUILD_CMD` runs, default `/home/liuxu/projects/MNN`
@@ -174,6 +182,8 @@ Useful environment variables:
 - `AKO_OUT_ROOT`: output root, default `results/runs`
 
 The public entry point is always `scripts/agent_bench.sh`. It calls a backend adapter under `scripts/backends/`. The default backend is `scripts/backends/qwen2_td_qnn.sh`, which wraps the known-good Qwen2 MoE TD QNN AOT Android command and writes `summary.jsonl` from the pulled device log. `scripts/parse_metrics.py` normalizes `summary.jsonl` into a single metrics JSON and appends it to `results/metrics_<stage>.jsonl`.
+
+For one-day studies, use `day_smoke_p16_d16` for most agent iterations and `day_signal_p32_d32` to recheck promising patches. Treat the evening 4-category run as the verdict benchmark, not as the per-iteration loop.
 
 ## Metrics
 
@@ -199,7 +209,7 @@ Read `references/metrics_schema.md` before interpreting missing or renamed field
 
 ## Iteration protocol
 
-Every code-changing benchmark attempt is one iteration. Number sequentially inside the experiment label:
+Every benchmarked code attempt is one iteration. Number sequentially inside the experiment label:
 
 ```text
 runtime_iter_01
@@ -207,6 +217,11 @@ runtime_iter_02
 cache_iter_01
 schedule_iter_03
 ```
+
+An iteration can be one of two types:
+
+- **Optimization iteration**: changes runtime policy and is eligible to become the best patch if correctness and guardrails pass.
+- **Diagnostic iteration**: adds lightweight counters or exposes existing diagnostics to improve bottleneck visibility. It is part of the same AKO loop, but is not eligible as a best speedup patch.
 
 Each iteration has exactly this closure sequence:
 
@@ -218,7 +233,9 @@ The log/archive step must happen before new probing or a new edit. This is AKO d
 
 Before the first code-changing iteration in a stage, run or cite a baseline for the exact same fixed benchmark contract. If S0 already provides the baseline and the stage reuses the same contract, cite the S0 result path in the first stage entry.
 
-Each iteration must be one coherent runtime-policy change tied to one hypothesis. Split unrelated edits into separate iterations, especially changes to caching behavior, scheduling behavior, diagnostics, build/deploy plumbing, and benchmark configuration.
+Each optimization iteration must be one coherent runtime-policy change tied to one hypothesis. Split unrelated edits into separate iterations, especially changes to caching behavior, scheduling behavior, diagnostics, build/deploy plumbing, and benchmark configuration.
+
+Each diagnostic iteration must answer one observation gap, such as separating page-touch, enqueue, finish, and total required-miss service time. It must preserve benchmark semantics, generated-token accounting, model work, prompt set, correctness checks, and parser semantics. Mark it as `diagnostic-only` in `ITERATIONS.md`.
 
 ### Logging
 
@@ -319,11 +336,14 @@ Re-assess:
 - Did `mib_per_token`, transfer volume, cache behavior, or scheduling delay move in the expected direction?
 - Is the failure due to missing systems context, missing file hints, or a real performance floor?
 - Would more context, better file localization, or extra instrumentation be more valuable than another blind edit?
+- Are the existing counters sufficient to distinguish the competing hypotheses?
+- If local diagnostics are insufficient, consult only stage-appropriate knowledge sources. Do not perform generic kernel-optimization search. For S1, external search is disabled except for harness/environment failures. For S2-S4, search should be limited to mobile MoE/runtime systems: expert caching, prefetching, transfer scheduling, heterogeneous CPU/GPU/NPU execution, Android thermal benchmarking, Qualcomm QNN/OpenCL behavior, and MoE serving systems. Prefer local project notes, official vendor documentation, and systems papers. Record what external knowledge was used and whether it would have violated the current stage's context budget.
 
 Default outcome:
 
 - Record the failure mode before changing context, file hints, or optimization direction.
 - Choose a new local policy axis only if diagnostics justify it.
+- If diagnostics cannot distinguish plausible causes, run one diagnostic iteration before another optimization iteration.
 
 Do not keep making random edits after a stall. The failure mode is part of the research output.
 
@@ -369,7 +389,18 @@ This skill does not assume `ncu`. Use system-level diagnostics instead:
 - scheduling delay
 - thermal and memory data
 
-If instrumentation is missing, adding diagnostics can be a valid iteration only when it does not change benchmark semantics. Log instrumentation-only iterations as such.
+After a baseline, and after a stall, produce a MobileMoE profiling report from available counters before choosing the next optimization direction. For required-miss work, include all available decomposition fields:
+
+- `decode_req_page_touch_ms`
+- `decode_req_mat_enqueue_ms`
+- `decode_req_mat_finish_ms`
+- `decode_req_service_ms`
+- `decode_req_mat_writes`
+- `decode_req_page_touch_mib`
+- `decode_core_upload_mib`
+- `decode_req_miss`, `decode_req_hit`, and `decode_evict`
+
+If these counters are missing or cannot distinguish the competing hypotheses, adding diagnostics can be a valid diagnostic iteration only when it does not change benchmark semantics. Log instrumentation-only iterations as such and do not treat them as speedup wins.
 
 Do not optimize blindly. A hypothesis should connect code behavior to at least one metric.
 

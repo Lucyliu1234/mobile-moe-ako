@@ -1,0 +1,23 @@
+diff --git a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+index c24aa0df..278a52df 100644
+--- a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
++++ b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+@@ -10110,6 +10110,18 @@ class Qwen2MoeTDRunner {
+ 	    if (hybrid_gpu_scratch_pool_max_free_mib_ < 0) {
+ 	      hybrid_gpu_scratch_pool_max_free_mib_ = 0;
+ 	    }
++    const bool materializer_pool_explicit =
++        std::getenv("MLLM_QNN_TD_HYBRID_GPU_MATERIALIZER_POOL") != nullptr;
++    const bool materializer_pool_max_buffer_explicit =
++        std::getenv("MLLM_QNN_TD_HYBRID_GPU_MATERIALIZER_POOL_MAX_BUFFER_MIB") != nullptr;
++    if (!materializer_pool_explicit &&
++        hybrid_npu_gpu_cpu_enabled_ && hybrid_gpu_core_arena_budget_mib_ > 0) {
++      hybrid_gpu_materializer_pool_ = true;
++      if (!materializer_pool_max_buffer_explicit) {
++        hybrid_gpu_materializer_pool_max_buffer_mib_ =
++            std::max(hybrid_gpu_materializer_pool_max_buffer_mib_, 128);
++      }
++    }
+     hybrid_gpu_materializer_pool_ =
+         env_bool("MLLM_QNN_TD_HYBRID_GPU_MATERIALIZER_POOL",
+                  hybrid_gpu_materializer_pool_);

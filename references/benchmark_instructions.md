@@ -6,11 +6,19 @@ Run from the MobileMoE-AKO skill directory unless the user copies the scripts in
 AKO_STAGE=runtime AKO_ITERATION_ID=runtime_iter_01 bash scripts/agent_bench.sh
 ```
 
-For fast smoke runs, reduce the prompt count and thermal waits:
+For daytime agent iterations, use one of the fixed fast profiles:
 
 ```bash
-AKO_STAGE=smoke AKO_ITERATION_ID=smoke AKO_LIMIT=1 AKO_REPEATS=1 AKO_IDLE_SECONDS=0 AKO_SLEEP_BETWEEN_RUNS_S=0 bash scripts/agent_bench.sh
+AKO_BENCH_PROFILE=day_smoke_p16_d16 AKO_ITERATION_ID=s1_iter_01 bash scripts/agent_bench.sh
 ```
+
+```bash
+AKO_BENCH_PROFILE=day_signal_p32_d32 AKO_ITERATION_ID=s1_iter_01_recheck bash scripts/agent_bench.sh
+```
+
+`day_smoke_p16_d16` uses one fixed prompt with 16 prompt tokens and 16 decode tokens. Use it for fast compile/run/correctness feedback and obvious regressions. `day_signal_p32_d32` uses one fixed prompt with 32 prompt tokens and 32 decode tokens. Use it to recheck promising patches before spending time on the evening verdict.
+
+The profile datasets are versioned under `references/datasets/` so the smoke contract is stable with the harness.
 
 ## Default Backend
 
@@ -33,6 +41,8 @@ That backend wraps the known-good Qwen2 MoE TD QNN AOT Android command under:
 ```
 
 It writes `summary.jsonl` from the pulled device log so `scripts/parse_metrics.py` can emit normalized metrics. The older `scripts/backends/ds2_edgemoe.sh` backend remains available by setting `AKO_BACKEND=ds2_edgemoe`.
+
+The default `qwen2_td_qnn` backend reads the prompt from `AKO_PROMPT` when provided. Otherwise, it reads the JSONL row selected by `AKO_DATASET` and `AKO_START_INDEX`.
 
 ## Branches
 

@@ -2,11 +2,15 @@
 set -euo pipefail
 
 SERIAL="${AKO_SERIAL:-10.29.230.131:5555}"
+DATASET="${AKO_DATASET:-}"
+LIMIT="${AKO_LIMIT:-0}"
+START_INDEX="${AKO_START_INDEX:-0}"
 DECODE_TOKENS="${AKO_DECODE_TOKENS:-8}"
 OUT_DIR="${AKO_OUT_DIR:-}"
 PHONE_BASE="${AKO_QWEN2_PHONE_BASE:-/data/local/tmp/qwen2_moe_td_w8a16_clean_20260527}"
 PHONE_LOG="${AKO_QWEN2_PHONE_LOG:-qwen2_td_qnn_mobile_moe_ako.log}"
-PROMPT_TEXT="${AKO_PROMPT:-hello}"
+PROMPT_TEXT="${AKO_PROMPT:-}"
+PROMPT_ROW_JSON="{}"
 RUNNER="${AKO_QWEN2_RUNNER:-mllm-qwen2-moe-td-qnn-aot-runner}"
 TIMEOUT_S="${AKO_BACKEND_TIMEOUT:-900}"
 
@@ -20,11 +24,23 @@ while [[ $# -gt 0 ]]; do
       DECODE_TOKENS="$2"
       shift 2
       ;;
+    --dataset)
+      DATASET="$2"
+      shift 2
+      ;;
+    --limit)
+      LIMIT="$2"
+      shift 2
+      ;;
+    --start-index)
+      START_INDEX="$2"
+      shift 2
+      ;;
     --out-dir)
       OUT_DIR="$2"
       shift 2
       ;;
-    --dataset|--repeats|--limit|--start-index|--local-runner|--push-runner|--preload-top-n|--global-cache-budget-mb|--mmap-only|--diag|--no-prefetch|--no-mbm-prefetch|--force-decode|--force-gguf-dequant-f32|--idle-seconds|--sleep-between-runs-s|--cooldown-max-wait-s)
+    --repeats|--local-runner|--push-runner|--preload-top-n|--global-cache-budget-mb|--mmap-only|--diag|--no-prefetch|--no-mbm-prefetch|--force-decode|--force-gguf-dequant-f32|--idle-seconds|--sleep-between-runs-s|--cooldown-max-wait-s)
       shift 2
       ;;
     *)
@@ -35,6 +51,34 @@ done
 
 if [[ -z "${OUT_DIR}" ]]; then
   OUT_DIR="$(pwd)/results/runs/qwen2_td_qnn_$(date +%Y%m%d_%H%M%S)"
+fi
+
+if [[ -z "${PROMPT_TEXT}" && -n "${DATASET}" && -f "${DATASET}" ]]; then
+  PROMPT_ROW_JSON="$(
+    python3 - "${DATASET}" "${START_INDEX}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+start = int(sys.argv[2])
+rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+if start < 0 or start >= len(rows):
+    raise SystemExit(f"start-index {start} out of range for {path} ({len(rows)} rows)")
+print(json.dumps(rows[start], ensure_ascii=False))
+PY
+  )"
+  PROMPT_TEXT="$(
+    python3 - "${PROMPT_ROW_JSON}" <<'PY'
+import json
+import sys
+print(json.loads(sys.argv[1]).get("prompt", ""))
+PY
+  )"
+fi
+
+if [[ -z "${PROMPT_TEXT}" ]]; then
+  PROMPT_TEXT="hello"
 fi
 
 mkdir -p "${OUT_DIR}/logs" "${OUT_DIR}/prompts"
@@ -140,7 +184,7 @@ set -e
 
 cat "${LOCAL_STDOUT}"
 
-python3 - "${LOCAL_LOG}" "${SUMMARY_JSONL}" "${SERIAL}" "${PHONE_BASE}/${PHONE_LOG}" "${ADB_STATUS}" "${DECODE_TOKENS}" <<'PY'
+python3 - "${LOCAL_LOG}" "${SUMMARY_JSONL}" "${SERIAL}" "${PHONE_BASE}/${PHONE_LOG}" "${ADB_STATUS}" "${DECODE_TOKENS}" "${PROMPT_ROW_JSON}" <<'PY'
 import json
 import math
 import re
@@ -153,6 +197,7 @@ serial = sys.argv[3]
 phone_log = sys.argv[4]
 adb_status = int(sys.argv[5])
 decode_tokens_requested = int(sys.argv[6])
+prompt_row = json.loads(sys.argv[7]) if len(sys.argv) > 7 and sys.argv[7].strip() else {}
 text = log_path.read_text(encoding="utf-8", errors="replace") if log_path.exists() else ""
 KV_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)=([^\s]+)")
 
@@ -217,6 +262,11 @@ if hybrid_matches:
 row = {
     "baseline": "qwen2_td_qnn",
     "run_id": "qwen2_td_qnn_once",
+    "id": prompt_row.get("id"),
+    "category": prompt_row.get("category"),
+    "source": prompt_row.get("source"),
+    "source_idx": prompt_row.get("source_idx"),
+    "prompt_tokens_dataset": prompt_row.get("prompt_tokens"),
     "serial": serial,
     "adb_status": adb_status,
     "ret": ret,

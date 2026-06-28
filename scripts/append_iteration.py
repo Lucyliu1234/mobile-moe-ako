@@ -16,6 +16,19 @@ METRIC_KEYS = [
     "upload_bytes",
     "prewarm_hit_rate",
     "eviction_churn",
+    "required_miss_wait_ms_per_token",
+    "decode_req_page_touch_ms",
+    "decode_req_mat_enqueue_ms",
+    "decode_req_mat_finish_ms",
+    "decode_req_service_ms",
+    "decode_req_mat_writes",
+    "decode_req_page_touch_mib",
+    "decode_core_upload_mib",
+    "decode_req_miss",
+    "decode_req_hit",
+    "decode_evict",
+    "cache_hit_rate",
+    "peak_temp_skin_c_decode",
 ]
 
 
@@ -34,6 +47,9 @@ def main() -> None:
     parser.add_argument("--iteration-id", required=True)
     parser.add_argument("--stage", required=True)
     parser.add_argument("--prompt-setting", default="")
+    parser.add_argument("--baseline-bottleneck", default="")
+    parser.add_argument("--targeted-bottleneck", default="")
+    parser.add_argument("--expected-diagnostic-movement", default="")
     parser.add_argument("--hypothesis", default="")
     parser.add_argument("--direction", default="")
     parser.add_argument("--files-inspected", default="")
@@ -61,6 +77,9 @@ def main() -> None:
         f"Iteration ID: {args.iteration_id}",
         f"Stage: {args.stage}",
         f"Agent prompt setting: {args.prompt_setting}",
+        f"Baseline bottleneck decomposition: {args.baseline_bottleneck}",
+        f"Targeted bottleneck: {args.targeted_bottleneck}",
+        f"Expected diagnostic movement: {args.expected_diagnostic_movement}",
         f"Agent hypothesis: {args.hypothesis}",
         f"Chosen optimization direction: {args.direction}",
         f"Files inspected: {args.files_inspected}",
