@@ -7,6 +7,16 @@ results/runs/
 results/*.jsonl
 *.log
 
+# Local report drafts and ad-hoc experiment artifacts
+reports/
+results/k1_lmhead/
+results/k2_fine_core_gemv/
+iterations/k1_*.md
+iterations/k2_*.md
+patches/failed_attempts/k1_*
+patches/failed_attempts/k2_*
+patches/failed_attempts/s6_followup_*
+
 # Temporary files
 *.tmp
 *.bak
