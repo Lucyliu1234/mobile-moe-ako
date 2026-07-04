@@ -47,3 +47,7 @@ per-key logical-request / physical-action evidence before optimization.
 `s6_harness_v1_1_trace_plumbing.md` is a diagnostic-only follow-up for empty
 event traces. It expects a runtime `trace_config` sentinel and classifies the
 failure as binary/env/log plumbing vs active-path event instrumentation.
+
+`s6_harness_v1_1_trace_plumbing_smoke.md` is a non-overwriting smoke validation
+of the binary provenance gate added after V1.1. It uses a fresh label and should
+not run optimization patches.
