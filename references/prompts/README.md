@@ -17,6 +17,11 @@ Use `references/experiment_protocol.md` for the high-level staged research desig
 
 Do not silently replace these prompts with shorter summaries. If a future run uses a different prompt, add it as a separate prompt reference or clearly mark the version.
 
+`harness_full_v1_optimization_test.md` is the current formal prompt for testing
+the new profiler-first harness as an optimization environment. It uses
+`mobile_profile.json`, `boundary_form.md`, agent-filled causal hypotheses, and
+the acceptance gate. Prefer it for new harness validation runs.
+
 `s1_plus_s6style_diagnostic_blackbox.md` is a derived controlled experiment rather than one of the original staged phases. It keeps the low-expert black-box context budget but uses a diagnostic-driven workflow, while explicitly forbidding prior-answer leakage.
 
 `s6_localizer_bounded_loop.md` is a derived controllability experiment. It tests
