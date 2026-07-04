@@ -32,3 +32,9 @@ uses the state-relation workflow with a longer autonomous iteration budget,
 multiple diagnostic-only iterations, and reflection checkpoints to test whether
 previous failures were caused by short budgets or by insufficient
 localization/feedback.
+
+`s6_harness_v0_bounded_flow.md` is the B-group pilot for the AKO4X-style harness
+flow. It does not rerun old S6 as A-control; instead it uses historical S6 runs
+as qualitative controls and tests whether `harness/benchmark_adapter.py`,
+`harness/localize_boundary.py`, state-relation files, and
+`harness/classify_result.py` make the loop more controllable.
