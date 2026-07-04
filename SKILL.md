@@ -58,7 +58,8 @@ Browse the target workspace and the MobileMoE-AKO package to identify:
 - **Model/prompt contract**: dataset, model artifact, decode length, repeat count, and correctness rule.
 - **Allowed edit surface**: runtime/policy files only, unless the user explicitly widens the contract.
 - **Existing logs**: `ITERATIONS.md`, `results/metrics_*.jsonl`, `patches/failed_attempts/`, prior stage branches.
-- **Hints/context**: `references/system_overview.md`, `references/constraints.md`, `references/benchmark_instructions.md`, and `references/metrics_schema.md`. Do not read or expand `references/experiment_protocol.md` unless the user affirmatively asks to use, run, inspect, or evaluate `S0-S4`, `progressive context`, or a staged research protocol. A negated instruction such as "do not use S0-S4" is not a trigger to read the protocol.
+- **Hints/context**: `references/system_overview.md`, `references/constraints.md`, `references/benchmark_instructions.md`, and `references/metrics_schema.md`. Do not read or expand `references/experiment_protocol.md` unless the user affirmatively asks to use, run, inspect, or evaluate the progressive context protocol, staged protocol, or how context affects agent behavior. A negated instruction such as "do not use the staged protocol" is not a trigger to read the protocol.
+- **Localization rules**: `references/control_surface_localization.md`, used after profiling to translate raw metrics into a bounded optimization task.
 
 Whether the runtime repo follows a clean research layout is not the signal. The signal is whether you can confidently identify the benchmark contract, policy surface, and guardrails.
 
@@ -125,21 +126,120 @@ Whenever you persist user-supplied hints, tell the user what changed and where. 
 
 The core skill is the reusable AKO-style MobileMoE loop. It does not require a specific staged experiment design.
 
-Read `references/experiment_protocol.md` only if the user affirmatively asks to use, run, inspect, or evaluate `S0-S4`, `progressive context`, `staged protocol`, or how context affects agent behavior. Do not read it merely because the prompt says not to use S0-S4. Do not include S0-S4 phases in a generic resolved plan.
+Read `references/experiment_protocol.md` only if the user affirmatively asks to use, run, inspect, or evaluate the progressive context protocol, staged protocol, or how context affects agent behavior. Do not read it merely because the prompt says not to use the staged protocol. Do not include staged phases in a generic resolved plan.
+
+Keep stage definitions in `references/experiment_protocol.md` and stage-specific prompts under `references/prompts/`. `SKILL.md` should remain the general execution discipline: workspace resolution, benchmark contract, edit loop, metrics, logging, commit/archive, and stopping rules.
 
 ## Workflow
 
-1. **Load context.** Read `references/system_overview.md`, `references/constraints.md`, `references/benchmark_instructions.md`, and `references/metrics_schema.md`. Read `references/experiment_protocol.md` only when the user affirmatively requests the staged research protocol.
+1. **Load context.** Read `references/system_overview.md`, `references/constraints.md`, `references/benchmark_instructions.md`, `references/metrics_schema.md`, and `references/control_surface_localization.md`. Read `references/experiment_protocol.md` only when the user affirmatively requests the staged research protocol.
 2. **Create or switch branch.** Use a branch that matches the experiment label and preserves useful commits. If the protocol specifies branch names, follow it.
 3. **Verify baseline contract.** Confirm benchmark inputs, model, decode length, and correctness guardrail are fixed. Do not silently change them to make iteration easier.
 4. **Verify stage baseline.** Before source edits in a stage, run or cite a baseline for the exact same benchmark contract. If the current protocol says no edits, run the harness and log the baseline without inspecting for changes.
-5. **Analyze baseline diagnostic decomposition.** Before the first source edit in a stage, inspect the baseline benchmark output, metrics, logs, and device state allowed by the stage context. In S1, treat metrics as raw black-box feedback and do not supply MoE-specific interpretations. In S2-S4, expert categories such as cache/miss, prefetch, eviction, residency, transfer scheduling, and heterogeneous execution may be used when the stage prompt allows them. Record the suspected bottleneck and any missing diagnostics in `ITERATIONS.md`.
-6. **Form the first hypothesis from the decomposition.** The first code-changing iteration must name the baseline bottleneck it targets and which metric or diagnostic should move. In S1, the hypothesis must be agent-inferred from benchmark feedback and repo inspection rather than supplied candidate directions. In S2-S4, the hypothesis may use the stage-provided expert concepts or file hints.
-7. **Inspect files.** Discover the relevant runtime paths, or start from user-provided candidate files when available. Always verify the call path before editing.
-8. **Make one coherent change.** Keep changes small enough to attribute metric movement to a policy hypothesis. Do not mix unrelated policy, benchmark, logging, parser, and instrumentation changes in one iteration.
-9. **Run the harness.** Use `bash scripts/agent_bench.sh` from the MobileMoE-AKO package, or the equivalent copied into the runtime repo.
-10. **Close the iteration immediately.** Append `ITERATIONS.md` and commit/archive before starting a new hypothesis.
-11. **Compare against baseline and stage best.** Use primary and guardrail metrics, then diagnostics to explain why the attempt worked or failed.
+5. **Analyze baseline diagnostic decomposition.** Before the first source edit in a stage, inspect the baseline benchmark output, metrics, logs, and device state allowed by the current prompt or staged protocol. Interpret metrics only within the context budget explicitly allowed for that stage. Record the suspected bottleneck and any missing diagnostics in `ITERATIONS.md`.
+6. **Localize the control surface.** Use `references/control_surface_localization.md` to translate the baseline diagnostics into a bounded optimization task: bottleneck class, expensive physical event, triggering logical decision, allowed edit surface, forbidden-first surface, must-inspect read/write sites, expected metric movement, and falsification rule.
+7. **Form the first hypothesis from the bounded task.** The first code-changing iteration must name the selected boundary it targets and which physical metric or diagnostic should move. Use only the concepts, diagnostics, file hints, and external knowledge allowed by the current prompt or staged protocol.
+8. **Inspect files.** Discover the relevant runtime paths, or start from user-provided candidate files when available. Always verify the call path before editing.
+9. **Make one coherent change.** Keep changes small enough to attribute metric movement to a policy hypothesis. Do not mix unrelated policy, benchmark, logging, parser, and instrumentation changes in one iteration.
+10. **Run the harness.** Use `bash scripts/agent_bench.sh` from the MobileMoE-AKO package, or the equivalent copied into the runtime repo.
+11. **Close the iteration immediately.** Append `ITERATIONS.md` and commit/archive before starting a new hypothesis.
+12. **Compare against baseline and stage best.** Use primary and guardrail metrics, then diagnostics to explain why the attempt worked or failed.
+
+## Diagnosis-Aware Control Loop
+
+Use this loop to make the agentic optimization process more controllable. The goal is not to reveal a stage-specific answer; it is to force every edit to be tied to a diagnosable systems control surface.
+
+### After baseline, before source edits
+
+Produce a bottleneck localization report before making the first code change. Use `references/control_surface_localization.md` as the decision table for translating metrics into a bounded optimization task. This report can be written in the assistant message and summarized in `ITERATIONS.md`; it does not require a separate script unless the active prompt asks for one.
+
+The report must include:
+
+- **Observed bottleneck pattern**: the metric pattern seen in the baseline, such as high transfer volume, cache churn, service-time bottleneck, scheduling contention, thermal/noise, or missing diagnostics.
+- **Evidence**: concrete metric names and values supporting the pattern.
+- **Selected bounded task**: the smallest optimization boundary justified by the profile.
+- **Expensive physical event**: the actual upload, read, write, synchronization, kernel execution, or resource action consuming time/bytes.
+- **Triggering logical decision**: the cache lookup, admission decision, scheduler decision, operator dispatch, or policy branch that causes the physical event.
+- **Allowed edit surface**: runtime states, policy decisions, resource paths, or kernel/operator classes that plausibly control the selected physical event.
+- **Forbidden-first directions**: plausible-looking edits that should not be tried first because they do not address the selected boundary or cannot be validated by current diagnostics.
+- **Code search targets**: functions, classes, state variables, or call paths to inspect first.
+- **Must-inspect read/write sites**: where the controlling state is read before the expensive physical event, where it is written after the event, and where it can be invalidated or evicted.
+- **Expected metric movement**: primary, guardrail, physical-cost, and supporting diagnostic fields that should move if the boundary is correct.
+- **Falsification rule**: what result proves the boundary is logical-only, scheduling-only, latency-shift, noisy, or wrong-path.
+- **Observation gaps**: missing counters or logs that would make a diagnostic-only iteration more valuable than an optimization attempt.
+
+Do not jump from a raw metric to a patch. First translate the metric pattern into a bounded task and code search target. If the report cannot name an expensive physical event, a triggering logical decision, and at least one read/write site to inspect, prefer a diagnostic iteration over an optimization edit.
+
+### Diagnostic planning gate
+
+After localization and before the first optimization edit, decide whether the available diagnostics can distinguish the main competing causes inside the selected boundary. Use the Diagnostic Plan Gate in `references/control_surface_localization.md`.
+
+If the selected boundary is plausible but competing causes remain indistinguishable, run one diagnostic-only iteration before optimization. The diagnostic plan must name:
+
+- **Competing causes**: plausible reasons for the expensive physical event.
+- **Missing observation**: the invisible state transition, resource lifetime, identity key, phase boundary, queue relation, or physical-skip relation.
+- **Minimal instrumentation**: the smallest counters or logs needed to distinguish those causes.
+- **Expected interpretation**: how each possible counter pattern maps to the next bounded task.
+- **Non-goals**: benchmark semantics, correctness, prompt/decode contract, model work, and parser semantics that must remain unchanged.
+
+Diagnostic-only iterations are not optimization wins. They should be archived or kept as diagnostic commits only when the active prompt asks for that. A later optimization patch must cite the diagnostic evidence that justifies its chosen control surface.
+
+### State-relation sub-localization
+
+For boundaries involving repeated physical work, apply the State-Relation Sub-Localizer from `references/control_surface_localization.md` before patching. Do not stop at a coarse label such as cache pressure, eviction, or queue contention if the diagnostics do not yet show how logical requests map to physical actions.
+
+The report must identify:
+
+- **Logical request identity**
+- **Physical action identity**
+- **Effect lifetime**
+- **Coverage relation**
+- **Invalidation reason**
+- **Execution phase**
+- **Reuse/skip decision**
+
+If these fields cannot be inferred from current metrics and code inspection, prefer a state-relation diagnostic-only iteration. The diagnostic should expose whether a later logical request repeated a physical action even though the previous physical effect was still reusable, or whether the physical effect was truly unavailable.
+
+### Patch hypothesis gate
+
+Before every source edit, answer this gate explicitly:
+
+1. What system bottleneck does this patch target?
+2. What runtime state, policy decision, resource path, or compute path will this patch change?
+3. Where is that state, decision, or path read, written, or executed in code?
+4. Which selected boundary from the localization report does this patch stay inside?
+5. What expensive physical event should be reduced or better scheduled?
+6. What logical decision controls that physical event?
+7. Where is the read site before the physical action, the write/update site after it, and any invalidation/eviction site?
+8. Why is this on the critical path for the fixed benchmark?
+9. What primary metric should improve?
+10. What physical-cost diagnostics should move consistently with the hypothesis?
+11. What supporting diagnostics should move consistently with the hypothesis?
+12. What guardrail metrics must not regress?
+13. What result would falsify the hypothesis?
+14. What false positive could this patch create?
+15. If the expected physical-cost movement does not appear, will this patch be rejected or archived?
+
+Do not edit until the gate is answered. If the gate cannot be answered from existing diagnostics and code inspection, prefer one small diagnostic iteration over a speculative optimization patch.
+
+### After each benchmark
+
+Classify the result before deciding whether to commit or archive. Use the stage's metrics and guardrails, not only the primary metric.
+
+Default result classes:
+
+- **true_system_win**: primary metric improves beyond noise, guardrails hold, and diagnostics move consistently with the hypothesis.
+- **transfer_win**: normalized transfer volume or physical upload volume falls without correctness or service regressions.
+- **scheduling_win**: transfer volume is stable, but scheduling/service diagnostics and primary metric improve consistently.
+- **logical_counter_only**: hit/miss or eviction counters improve, but physical transfer volume, service time, and primary metric do not support a real win.
+- **latency_shift**: one service subcounter improves while another absorbs the cost, with no meaningful total service or primary-metric improvement.
+- **noise_or_no_signal**: primary metric movement is within noise or diagnostics do not support the hypothesis.
+- **regression**: correctness, primary metric, transfer guardrail, thermal comparability, or service diagnostics regress.
+- **invalid**: build, deploy, correctness, generated-token, parser, or benchmark-contract failure.
+
+Do not accept a patch based only on a local diagnostic if the end-to-end metric and guardrails do not support it. Do not accept a patch based only on a small primary-metric movement if diagnostics contradict the hypothesis.
+
+Record the classification and the reason in `ITERATIONS.md`.
 
 ## Harness
 
@@ -152,13 +252,13 @@ bash scripts/agent_bench.sh
 Daytime fast smoke command:
 
 ```bash
-AKO_BENCH_PROFILE=day_smoke_p16_d16 AKO_ITERATION_ID=s1_iter_01 bash scripts/agent_bench.sh
+AKO_BENCH_PROFILE=day_smoke_p16_d16 AKO_ITERATION_ID=runtime_iter_01 bash scripts/agent_bench.sh
 ```
 
 Daytime signal recheck command:
 
 ```bash
-AKO_BENCH_PROFILE=day_signal_p32_d32 AKO_ITERATION_ID=s1_iter_01_recheck bash scripts/agent_bench.sh
+AKO_BENCH_PROFILE=day_signal_p32_d32 AKO_ITERATION_ID=runtime_iter_01_recheck bash scripts/agent_bench.sh
 ```
 
 Useful environment variables:
@@ -231,7 +331,7 @@ Each iteration has exactly this closure sequence:
 
 The log/archive step must happen before new probing or a new edit. This is AKO discipline: do not read the benchmark result, jump into the next idea, and reconstruct the log later from memory.
 
-Before the first code-changing iteration in a stage, run or cite a baseline for the exact same fixed benchmark contract. If S0 already provides the baseline and the stage reuses the same contract, cite the S0 result path in the first stage entry.
+Before the first code-changing iteration in a stage, run or cite a baseline for the exact same fixed benchmark contract. If a shared protocol baseline already exists and the stage reuses the same contract, cite that result path in the first stage entry.
 
 Each optimization iteration must be one coherent runtime-policy change tied to one hypothesis. Split unrelated edits into separate iterations, especially changes to caching behavior, scheduling behavior, diagnostics, build/deploy plumbing, and benchmark configuration.
 
@@ -337,7 +437,7 @@ Re-assess:
 - Is the failure due to missing systems context, missing file hints, or a real performance floor?
 - Would more context, better file localization, or extra instrumentation be more valuable than another blind edit?
 - Are the existing counters sufficient to distinguish the competing hypotheses?
-- If local diagnostics are insufficient, consult only stage-appropriate knowledge sources. Do not perform generic kernel-optimization search. For S1, external search is disabled except for harness/environment failures. For S2-S4, search should be limited to mobile MoE/runtime systems: expert caching, prefetching, transfer scheduling, heterogeneous CPU/GPU/NPU execution, Android thermal benchmarking, Qualcomm QNN/OpenCL behavior, and MoE serving systems. Prefer local project notes, official vendor documentation, and systems papers. Record what external knowledge was used and whether it would have violated the current stage's context budget.
+- If local diagnostics are insufficient, consult only knowledge sources allowed by the current prompt or staged protocol. Do not perform generic kernel-optimization search unless the current experiment is explicitly a kernel-level study. Record what external knowledge was used and whether that knowledge would have violated the current stage's context budget.
 
 Default outcome:
 
@@ -437,8 +537,10 @@ Examples:
 - `references/benchmark_instructions.md`: harness usage, branches, and logging commands.
 - `references/metrics_schema.md`: metric names and normalization.
 - `references/constraints.md`: allowed and forbidden changes.
+- `references/control_surface_localization.md`: reusable profiling-to-boundary localization rules.
 - `references/experiment_protocol.md`: optional staged research protocol for progressive context experiments.
-- `references/expert_hints/coremoe_required_core.md`: expert mechanisms for stages that intentionally expose domain hints; do not read for S1 black-box runs.
+- `references/expert_hints/coremoe_required_core.md`: expert mechanisms for stages that intentionally expose domain hints; read only when the active prompt or protocol permits it.
+- `references/prompts/`: optional staged-protocol prompts; read only the prompt selected by the active protocol or user request.
 - `scripts/backends/qwen2_td_qnn.sh`: default backend adapter for the known-good Qwen2 MoE TD QNN AOT Android command.
 - `scripts/backends/ds2_edgemoe.sh`: optional backend adapter for the older DeepSeek-V2 EdgeMoE Android runner.
 - `ITERATIONS.md`: durable iteration log.

@@ -24,6 +24,14 @@ The harness prints and stores one normalized metrics JSON per run.
 - `decode_req_page_touch_ms`: decode-phase required payload mmap/page-touch time.
 - `decode_req_mat_enqueue_ms`: decode-phase OpenCL/materializer enqueue time for required payload writes.
 - `decode_req_mat_finish_ms`: decode-phase OpenCL/materializer finish wait time for required payload writes.
+- `decode_hybrid_upload_attr_mincore_before_ms`: optional decode-phase time spent sampling mmap residency before explicit page touch.
+- `decode_hybrid_upload_attr_mincore_after_ms`: optional decode-phase time spent sampling mmap residency after explicit page touch.
+- `decode_hybrid_upload_attr_pages_before`: optional sampled mmap pages before explicit page touch.
+- `decode_hybrid_upload_attr_resident_before`: optional sampled resident mmap pages before explicit page touch.
+- `decode_hybrid_upload_attr_pages_after`: optional sampled mmap pages after explicit page touch.
+- `decode_hybrid_upload_attr_resident_after`: optional sampled resident mmap pages after explicit page touch.
+- `decode_hybrid_upload_attr_spans`: optional counted external payload upload spans attributed by the diagnostic.
+- `decode_hybrid_upload_attr_mib`: optional external payload MiB covered by upload attribution diagnostics.
 - `decode_req_service_ms`: decode-phase total required-miss service time.
 - `decode_req_mat_writes`: decode-phase required payload write count.
 - `decode_req_page_touch_mib`: decode-phase payload MiB covered by page-touch accounting.
@@ -31,6 +39,18 @@ The harness prints and stores one normalized metrics JSON per run.
 - `decode_req_miss`: decode-phase required miss count.
 - `decode_req_hit`: decode-phase required hit count.
 - `decode_evict`: decode-phase eviction count.
+- `res_probe`: optional state-level residency probes on the required GPU-v3 payload path when `MLLM_QNN_TD_RESIDENCY_TRACE=1`.
+- `res_hit`: optional residency probes that hit a logical cache entry.
+- `res_miss`: optional residency probes that miss a logical cache entry.
+- `res_mat_req`: optional materialization requests observed after residency misses.
+- `res_upload`: optional physical packed-payload upload observations.
+- `res_dup_upload`: optional repeated physical packed-payload uploads with the same layer/expert/source/size key.
+- `res_record`: optional logical cache-entry records written after materialization.
+- `res_evict`: optional logical residency records evicted on the traced payload path.
+- `res_base_record`: optional base-projection packed-payload records written.
+- `res_sibling_missing`: optional missing companion logical entries observed after a base packed-payload record.
+- `res_later_sibling_miss`: optional later sibling-projection misses after a base packed-payload record was seen for the layer.
+- `res_later_sibling_hit`: optional later sibling-projection hits after a base packed-payload record was seen for the layer.
 - `energy_j_per_token_decode`: optional energy per generated token.
 - `peak_temp_skin_c_decode`: optional thermal diagnostic.
 
@@ -48,6 +68,7 @@ Stage boundary:
 - demand misses: `required_miss_count`, `cache_hit_rate`, required hit/miss counts
 - miss service: `required_miss_wait_ms_per_token`, materialization/upload/page-touch timing when exposed
 - required-miss service decomposition: `decode_req_page_touch_ms`, `decode_req_mat_enqueue_ms`, `decode_req_mat_finish_ms`, `decode_req_service_ms`, `decode_req_mat_writes`
+- state-level residency trace when enabled: `res_probe`, `res_hit`, `res_miss`, `res_mat_req`, `res_upload`, `res_dup_upload`, `res_record`, `res_evict`, `res_base_record`, `res_sibling_missing`, `res_later_sibling_miss`, `res_later_sibling_hit`
 - churn: `eviction_churn`, demand evicts, hot evicts, arena/window evicts when exposed
 - prefetch usefulness: `prewarm_hit_rate`, pre-hit/pre-miss, submit/complete/skip counters when exposed
 - other runtime costs: lm_head, shared expert, QNN/GPU timing when exposed

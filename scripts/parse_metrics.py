@@ -188,6 +188,22 @@ def build_metrics(args: argparse.Namespace, rows: list[dict[str, Any]]) -> dict[
         "decode_req_miss": total(rows, "decode_hybrid_req_miss"),
         "decode_req_hit": total(rows, "decode_hybrid_req_hit"),
         "decode_evict": total(rows, "decode_hybrid_evict"),
+        "res_probe": total(rows, "decode_hybrid_res_probe"),
+        "res_hit": total(rows, "decode_hybrid_res_hit"),
+        "res_miss": total(rows, "decode_hybrid_res_miss"),
+        "res_mat_req": total(rows, "decode_hybrid_res_mat_req"),
+        "res_upload": total(rows, "decode_hybrid_res_upload"),
+        "res_dup_upload": total(rows, "decode_hybrid_res_dup_upload"),
+        "res_record": total(rows, "decode_hybrid_res_record"),
+        "res_evict": total(rows, "decode_hybrid_res_evict"),
+        "res_base_record": total(rows, "decode_hybrid_res_base_record"),
+        "res_sibling_missing": total(rows, "decode_hybrid_res_sibling_missing"),
+        "res_later_sibling_miss": total(
+            rows, "decode_hybrid_res_later_sibling_miss"
+        ),
+        "res_later_sibling_hit": total(
+            rows, "decode_hybrid_res_later_sibling_hit"
+        ),
         "energy_j_per_token_decode": avg(rows, "energy_j_per_token_decode"),
         "peak_temp_skin_c_decode": avg(rows, "peak_temp_skin_c_decode"),
         "source_summary": str(args.summary),
