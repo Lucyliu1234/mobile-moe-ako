@@ -3675,3 +3675,45 @@ Agent diagnosis: Harness v0 was useful for controllability. It forced a bounded 
 My diagnosis: Relative to historical A-control, B improved experimental control more than speed. The harness made failure easier to explain: iter 01 failed at build/deploy gate, iter 02 was a classified throughput regression with flat transfer volume, and no unclassified or subjective win was accepted. The harness was useful, not too weak; if anything, it should add per-key logical/physical trace support so future bounded tasks can distinguish identity mismatch from capacity pressure without requiring speculative runtime-policy edits.
 Needed expert knowledge: Per-key residency/victim/physical-upload identity would be the next useful diagnostic capability. Without it, further eviction/effect-lifetime edits would be underdetermined by aggregate counters.
 Patch / commit: none accepted; runtime branch remains at base commit da9fa3534a16c0f34adb6709e2ba871741cbf8cc with failed patches archived.
+
+## s6_harness_v1_event_trace_baseline_fasttemp_p16_d16
+
+Iteration ID: s6_harness_v1_event_trace_baseline_fasttemp_p16_d16
+Stage: s6_harness_v1_event_trace
+Agent prompt setting: S6 Harness V1 Event Trace diagnostic baseline
+Baseline bottleneck decomposition: bounded_task.json localizes transfer_residency from aggregate metrics: decode_tok_s=0.31, mib_per_token=4673.9419375, upload_bytes=78415733456.896, required_miss_count=22032, eviction_churn=21360, required_miss_wait_ms_per_token=5887.587625.
+Targeted bottleneck: Diagnostic-only event-level logical request vs physical action trace for transfer/residency repeated work; no optimization patch allowed by prompt.
+Expected diagnostic movement: Expected [TD-RES-TRACE] events to populate logical_keys, physical_keys, upload/repeat_upload/record/evict/later_access samples under event limit 200.
+Agent hypothesis: Sampled event logs would upgrade aggregate state_relation evidence by showing which logical keys triggered physical uploads, duplicate physical keys, coverage relations, and whether later misses occurred before or after invalidation.
+Chosen optimization direction: Diagnostic harness evolution: event-level state-relation extraction and interpretation.
+Files inspected: references/state_relation_trace_schema.md; harness/extract_state_trace.py; harness/localize_boundary.py; scripts/backends/qwen2_td_qnn.sh; results/runs/s6_harness_v1_event_trace_baseline_fasttemp_p16_d16/metrics.json; state_trace_summary.json; bounded_task.json; logs/qwen2_td_qnn_remote.sh
+Files modified: results/runs/s6_harness_v1_event_trace_baseline_fasttemp_p16_d16/state_relation.event_level.json; ITERATIONS.md
+Change summary: Ran required event-trace baseline, extracted state_trace.jsonl/state_trace_summary.json, localized bounded task, and wrote event-level interpretation. No runtime optimization edits were made.
+Benchmark command: python3 harness/benchmark_adapter.py run --label s6_harness_v1_event_trace_baseline_fasttemp_p16_d16 --runtime /home/liuxu/projects/mllm --stage s6_harness_v1_event_trace --profile day_smoke_p16_d16 --trace-residency --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENTS=1 --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENT_LIMIT=200
+Compile result: success; adapter_check valid=true
+Correctness result: correct=true; generated_tokens=16.0; runs=1
+Metrics:
+  decode_tok_s: 0.31
+  mib_per_token: 4673.9419375
+  required_miss_count: 22032.0
+  upload_bytes: 78415733456.896
+  prewarm_hit_rate: 1.0
+  eviction_churn: 21360.0
+  required_miss_wait_ms_per_token: 5887.587625
+  decode_req_page_touch_ms: None
+  decode_req_mat_enqueue_ms: None
+  decode_req_mat_finish_ms: None
+  decode_req_service_ms: None
+  decode_req_mat_writes: None
+  decode_req_page_touch_mib: None
+  decode_core_upload_mib: None
+  decode_req_miss: None
+  decode_req_hit: None
+  decode_evict: None
+  cache_hit_rate: 0.3169642857142857
+  peak_temp_skin_c_decode: None
+Result: diagnostic_harness_failure: extractor found zero [TD-RES-TRACE] events, so stop rule triggered and no optimization was run.
+Agent diagnosis: The harness/backend requested aggregate trace and event trace flags in qwen2_td_qnn_remote.sh, including MLLM_QNN_TD_RESIDENCY_TRACE=1, MLLM_QNN_TD_RESIDENCY_TRACE_EVENTS=1, and MLLM_QNN_TD_RESIDENCY_TRACE_EVENT_LIMIT=200. The captured qwen2_td_qnn.log contained no [TD-RES-TRACE] lines, leaving state_trace_summary events=0. This prevents answering per-key state-relation questions from event evidence.
+My diagnosis: Event-level tracing did not improve control-surface localization in this run. Aggregate metrics still localize a transfer/residency repeated-work boundary, but the event-level artifact is empty, so logical missing state vs true physical eviction vs key mismatch vs phase divergence remains unknown. The next work should fix event emission/capture before optimization.
+Needed expert knowledge: Need runtime/harness knowledge of why MLLM_QNN_TD_RESIDENCY_TRACE_EVENTS did not produce [TD-RES-TRACE] log lines despite the env being present in the remote script: compile/deploy provenance, log level capture, code path gating, or event counter limit behavior.
+Patch / commit: No optimization patch; diagnostic artifact written at results/runs/s6_harness_v1_event_trace_baseline_fasttemp_p16_d16/state_relation.event_level.json
