@@ -4,6 +4,10 @@ This protocol is project-specific. It is not part of vanilla AKO4ALL and is not 
 
 Use it when the goal is to evaluate how much system context an agent needs for whole-system mobile MoE optimization. The reusable skill remains the AKO-style loop; this file defines one research design that wraps that loop.
 
+Keep this staged protocol separate from `SKILL.md`: the skill defines the reusable execution discipline, while this file defines the S0-S6 context budgets, stage purposes, and stage-specific evidence requirements.
+
+The files under `references/prompts/` are the concrete Codex prompts used for the staged runs. They may include stricter branch names, benchmark commands, run budgets, log-isolation rules, and build/deploy checks than the short stage descriptions below. When reproducing a run, treat the corresponding prompt file as the source of truth for execution details.
+
 ## Principle
 
 Run the same target under separate context conditions:
@@ -22,12 +26,12 @@ Every code-changing round must contain one coherent runtime-policy change tied t
 
 Failed attempts are part of the trajectory. Record and archive compile failures, correctness failures, generated-token mismatches, speed regressions, no-signal changes, wrong file choices, forbidden-surface edits, and hypothesis/metric mismatches.
 
-Baseline decomposition is required before the first source edit in every stage, but its interpretation is stage-bounded. In S1, decomposition is black-box observation of benchmark metrics, logs, and device state; do not supply MoE-specific optimization categories. In S2-S4, decomposition may use the expert concepts or file hints intentionally provided by that stage.
+Baseline decomposition is required before the first source edit in every stage, but its interpretation is stage-bounded. In S1, decomposition is black-box observation of benchmark metrics, logs, and device state; do not supply MoE-specific optimization categories. In S2-S6, decomposition may use the expert concepts, file hints, or diagnostic requirements intentionally provided by that stage.
 
 Stage-aware search policy:
 
 - S1: external search is disabled except for benchmark/harness/environment failures. Do not search for MoE-specific optimization mechanisms or read expert hints. Missing domain knowledge is an S1 result.
-- S2-S4: after a stall, search only for mobile MoE/runtime-system material: expert caching, prefetching, transfer scheduling, heterogeneous CPU/GPU/NPU execution, Android thermal benchmarking, Qualcomm QNN/OpenCL behavior, and MoE serving systems. Prefer local project notes, official vendor documentation, and systems papers. Do not perform generic kernel-optimization search unless the chosen file is actually a kernel.
+- S2-S6: after a stall, search only for mobile MoE/runtime-system material: expert caching, prefetching, transfer scheduling, heterogeneous CPU/GPU/NPU execution, Android thermal benchmarking, Qualcomm QNN/OpenCL behavior, and MoE serving systems. Prefer local project notes, official vendor documentation, and systems papers. Do not perform generic kernel-optimization search unless the chosen file is actually a kernel.
 - Every external source or project note used after a stall must be named in `ITERATIONS.md`, along with whether that knowledge would have violated the current stage's context budget.
 
 ## Stages
@@ -168,6 +172,64 @@ Suggested outputs:
 ```text
 exp/s4-single-file
 results/metrics_s4.jsonl
+```
+
+### S5: Expert-Guided Diagnostic Optimization
+
+Purpose: test whether stronger systems expert knowledge improves localization and hypothesis quality after earlier stages have exposed symptoms but not a convincing mechanism.
+
+Add expert knowledge such as:
+
+- Android/Linux `madvise` is a hint, not a guarantee that mapped pages are already resident
+- OpenCL buffer writes may impose host-memory lifetime and synchronization constraints
+- page-touch, materialization enqueue, materialization finish, and device upload can shift latency between counters
+- cache hit rate, transfer volume, and service time must be interpreted together
+- a local timing reduction is not enough if end-to-end throughput or normalized transfer guardrails regress
+
+Read `references/prompts/s5_expert_diagnostic.md`.
+
+Before edits, cite the shared baseline if the contract is unchanged, or run `s5_baseline_01`.
+
+Recommended rounds: 3.
+
+Suggested outputs:
+
+```text
+exp/s5-expert-diagnostic
+results/metrics_s5.jsonl
+```
+
+### S6: Diagnostic-Driven Runtime Optimization
+
+Purpose: test whether fine-grained runtime diagnostics and invariants can drive optimization direction more reliably than expert priors alone.
+
+S6 may retain the broad systems context learned in S2-S5, but diagnostics should decide the next hypothesis. Before each code-changing iteration, the agent must connect:
+
+```text
+observed metric anomaly -> verified runtime code path -> falsifiable hypothesis -> expected metric movement
+```
+
+Use fine-grained counters when available:
+
+- normalized dynamic transfer volume
+- cache hit, miss, eviction, and churn behavior
+- required-miss or parameter-miss service time
+- page-touch, materialization enqueue, materialization finish, and upload timing
+- thermal state and correctness/generation guardrails
+
+If existing counters cannot distinguish competing hypotheses, run a minimal diagnostic-only iteration before another optimization attempt. Read `references/prompts/s6_diagnostic_driven.md`.
+
+Important: this stage definition is method-level. It must not encode a known successful patch mechanism. If a later controlled experiment asks for black-box diagnostic-driven behavior, do not reveal prior S6 solution details.
+
+Before edits, cite the shared baseline if the contract is unchanged, or run `s6_baseline_01`.
+
+Recommended rounds: 3, with optional follow-up only when diagnostics expose a new, separable bottleneck.
+
+Suggested outputs:
+
+```text
+exp/s6-diagnostic-driven
+results/metrics_s6.jsonl
 ```
 
 ## Reporting
