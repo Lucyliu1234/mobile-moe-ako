@@ -20,6 +20,54 @@ AKO_BENCH_PROFILE=day_signal_p32_d32 AKO_ITERATION_ID=s1_iter_01_recheck bash sc
 
 The profile datasets are versioned under `references/datasets/` so the smoke contract is stable with the harness.
 
+## Harness Adapter Phone Benchmark
+
+For current harness-mediated runs, prefer `harness/benchmark_adapter.py` over
+calling `scripts/agent_bench.sh` directly. The adapter writes
+`adapter_manifest.json` beside the run artifacts and keeps the phone benchmark
+contract explicit.
+
+Baseline template:
+
+```bash
+python3 harness/benchmark_adapter.py run \
+  --label <experiment>_baseline_fasttemp_p16_d16 \
+  --runtime /home/liuxu/projects/mllm \
+  --stage <experiment> \
+  --profile day_smoke_p16_d16 \
+  --trace-residency \
+  --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENTS=1 \
+  --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENT_LIMIT=300
+```
+
+Candidate template:
+
+```bash
+python3 harness/benchmark_adapter.py run \
+  --label <experiment>_iter_XX_fasttemp_p16_d16 \
+  --runtime /home/liuxu/projects/mllm \
+  --stage <experiment> \
+  --profile day_smoke_p16_d16 \
+  --baseline-metrics results/runs/<experiment>_baseline_fasttemp_p16_d16/metrics.json \
+  --trace-residency \
+  --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENTS=1 \
+  --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENT_LIMIT=300
+```
+
+The default phone/device contract is owned by `scripts/backends/qwen2_td_qnn.sh`:
+
+- serial: `AKO_SERIAL`, default `10.29.230.131:5555`
+- phone base: `/data/local/tmp/qwen2_moe_td_w8a16_clean_20260527`
+- runner: `mllm-qwen2-moe-td-qnn-aot-runner`
+- context length: `384`
+- GPU cache capacity: `8`
+- profile `day_smoke_p16_d16`: fixed p16/d16 smoke benchmark
+- profile `day_signal_p32_d32`: fixed p32/d32 recheck benchmark
+
+If ADB fails with a smartsocket/listener permission error, rerun the exact same
+adapter command with escalated device access. Do not change benchmark settings
+to work around device permissions.
+
 ## Default Backend
 
 The public entry point is:
