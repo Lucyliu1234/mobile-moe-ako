@@ -145,9 +145,13 @@ and fixed profile. For current Qwen2 TD QNN residency/event tracing, use:
 
 ```text
 --trace-residency
---extra-env MLLM_QNN_TD_RESIDENCY_TRACE_EVENTS=1
---extra-env MLLM_QNN_TD_RESIDENCY_TRACE_EVENT_LIMIT=<N>
+--extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENTS=1
+--extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENT_LIMIT=<N>
 ```
+
+The adapter/backend layer maps these `AKO_QWEN2_*` controls to the on-device
+`MLLM_QNN_TD_*` environment variables. When using `benchmark_adapter.py`, pass
+the `AKO_QWEN2_*` controls rather than direct phone-only `MLLM_*` names.
 
 If ADB fails with a smartsocket/listener permission error, rerun the exact same
 adapter command with escalated device access. Do not change benchmark settings
