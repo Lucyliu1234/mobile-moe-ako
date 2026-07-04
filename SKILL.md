@@ -97,6 +97,10 @@ If a field is still uncertain, resolve it before editing.
 
 The MobileMoE-AKO package owns the reusable harness scaffold:
 
+- `harness/benchmark_adapter.py`
+- `harness/localize_boundary.py`
+- `harness/classify_result.py`
+- `harness/harness_ledger.md`
 - `scripts/agent_bench.sh`
 - `scripts/backends/`
 - `scripts/parse_metrics.py`
@@ -282,6 +286,13 @@ Useful environment variables:
 - `AKO_OUT_ROOT`: output root, default `results/runs`
 
 The public entry point is always `scripts/agent_bench.sh`. It calls a backend adapter under `scripts/backends/`. The default backend is `scripts/backends/qwen2_td_qnn.sh`, which wraps the known-good Qwen2 MoE TD QNN AOT Android command and writes `summary.jsonl` from the pulled device log. `scripts/parse_metrics.py` normalizes `summary.jsonl` into a single metrics JSON and appends it to `results/metrics_<stage>.jsonl`.
+
+For harness-mediated studies, prefer the wrappers under `harness/`:
+
+- `harness/benchmark_adapter.py` records a run manifest and calls the same fixed benchmark entry point.
+- `harness/localize_boundary.py` turns baseline metrics into a bounded task before patching.
+- `harness/classify_result.py` compares candidate metrics against baseline metrics and emits a verdict class.
+- `harness/harness_ledger.md` records why harness rules changed.
 
 For one-day studies, use `day_smoke_p16_d16` for most agent iterations and `day_signal_p32_d32` to recheck promising patches. Treat the evening 4-category run as the verdict benchmark, not as the per-iteration loop.
 
