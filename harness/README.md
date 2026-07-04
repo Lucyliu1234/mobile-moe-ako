@@ -1,4 +1,4 @@
-# MobileMoE-AKO Harness V0
+# MobileMoE-AKO Harness
 
 This directory contains the first AKO4X-style harness layer for MobileMoE
 whole-system runtime optimization. The tools do not replace the existing
