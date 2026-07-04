@@ -6,17 +6,20 @@ Run from the MobileMoE-AKO skill directory unless the user copies the scripts in
 AKO_STAGE=runtime AKO_ITERATION_ID=runtime_iter_01 bash scripts/agent_bench.sh
 ```
 
-For daytime agent iterations, use one of the fixed fast profiles:
+For daytime agent iterations, use the fixed fast profile:
 
 ```bash
 AKO_BENCH_PROFILE=day_smoke_p16_d16 AKO_ITERATION_ID=s1_iter_01 bash scripts/agent_bench.sh
 ```
 
+Use the larger signal profile only after a p16/d16 patch has already been
+accepted:
+
 ```bash
 AKO_BENCH_PROFILE=day_signal_p32_d32 AKO_ITERATION_ID=s1_iter_01_recheck bash scripts/agent_bench.sh
 ```
 
-`day_smoke_p16_d16` uses one fixed prompt with 16 prompt tokens and 16 decode tokens. Use it for fast compile/run/correctness feedback and obvious regressions. `day_signal_p32_d32` uses one fixed prompt with 32 prompt tokens and 32 decode tokens. Use it to recheck promising patches before spending time on the evening verdict.
+`day_smoke_p16_d16` uses one fixed prompt with 16 prompt tokens and 16 decode tokens. Use it for baseline and every normal p16 candidate iteration. `day_signal_p32_d32` uses one fixed prompt with 32 prompt tokens and 32 decode tokens. Use it only to recheck an already accepted p16/d16 patch before spending time on the evening verdict.
 
 The profile datasets are versioned under `references/datasets/` so the smoke contract is stable with the harness.
 
@@ -53,6 +56,27 @@ python3 harness/benchmark_adapter.py run \
   --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENTS=1 \
   --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENT_LIMIT=300
 ```
+
+Accepted-patch recheck template:
+
+```bash
+python3 harness/benchmark_adapter.py run \
+  --label <experiment>_accepted_recheck_p32_d32 \
+  --runtime /home/liuxu/projects/mllm \
+  --stage <experiment> \
+  --profile day_signal_p32_d32 \
+  --baseline-metrics results/runs/<experiment>_baseline_fasttemp_p16_d16/metrics.json \
+  --trace-residency \
+  --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENTS=1 \
+  --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENT_LIMIT=300
+```
+
+Profile rule for formal harness optimization tests:
+
+- baseline: `day_smoke_p16_d16`
+- each normal candidate iteration: `day_smoke_p16_d16`
+- accepted-patch recheck only: `day_signal_p32_d32`
+- rejected or inconclusive patches: no `day_signal_p32_d32` run
 
 The default phone/device contract is owned by `scripts/backends/qwen2_td_qnn.sh`:
 
