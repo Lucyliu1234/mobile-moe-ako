@@ -77,3 +77,21 @@ the V1.1 trace-plumbing prompt so zero-event diagnostics split into:
 Status:
 Accepted as observability plumbing. This is a diagnostic reliability change, not
 a runtime optimization.
+
+## 2026-07-04 - Require Binary Provenance Before Trace Interpretation
+
+Finding:
+The V1.1 trace-plumbing run initially produced zero events because the deployed
+phone runner did not match the rebuilt local runtime binary. After rebuilding
+`/home/liuxu/projects/mllm` at `f4a73850`, deploying that exact runner, and
+verifying host/phone md5 equality, the same trace path produced `trace_config`
+and data events.
+
+Harness change:
+Event-trace prompts and schema now require host/phone runner md5 verification
+before interpreting missing traces. An md5 mismatch is classified as
+`binary_provenance_invalid`, not as an event-schema or active-path failure.
+
+Status:
+Accepted. This turns an ambiguous zero-event observation into a concrete
+build/deploy provenance gate.

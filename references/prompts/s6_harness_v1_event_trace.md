@@ -33,6 +33,19 @@ MLLM_QNN_TD_RESIDENCY_TRACE_EVENTS=1 sampled JSON event logs
 MLLM_QNN_TD_RESIDENCY_TRACE_EVENT_LIMIT=<small cap>
 ```
 
+Before interpreting zero or missing event traces, verify binary provenance:
+
+```text
+host runner md5
+phone runner md5
+host md5 == phone md5
+phone runner path/size/mode
+runtime branch/commit
+```
+
+If host and phone runner md5 do not match, classify the run as
+`binary_provenance_invalid` and stop without judging the event-trace schema.
+
 ## Required Baseline
 
 Run the adapter with event tracing enabled:

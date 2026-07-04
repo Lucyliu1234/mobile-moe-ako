@@ -3717,3 +3717,117 @@ Agent diagnosis: The harness/backend requested aggregate trace and event trace f
 My diagnosis: Event-level tracing did not improve control-surface localization in this run. Aggregate metrics still localize a transfer/residency repeated-work boundary, but the event-level artifact is empty, so logical missing state vs true physical eviction vs key mismatch vs phase divergence remains unknown. The next work should fix event emission/capture before optimization.
 Needed expert knowledge: Need runtime/harness knowledge of why MLLM_QNN_TD_RESIDENCY_TRACE_EVENTS did not produce [TD-RES-TRACE] log lines despite the env being present in the remote script: compile/deploy provenance, log level capture, code path gating, or event counter limit behavior.
 Patch / commit: No optimization patch; diagnostic artifact written at results/runs/s6_harness_v1_event_trace_baseline_fasttemp_p16_d16/state_relation.event_level.json
+
+## s6_harness_v1_1_trace_plumbing_fasttemp_p16_d16
+
+Iteration ID: s6_harness_v1_1_trace_plumbing_fasttemp_p16_d16
+Stage: s6_harness_v1_1_trace_plumbing
+Agent prompt setting: S6 Harness V1.1 Trace Plumbing Debug; diagnostic harness run only, no runtime-policy optimization.
+Targeted bottleneck: Harness/runtime event-trace plumbing for `[TD-RES-TRACE]` state-relation events.
+Expected diagnostic movement: Runtime log should contain the sentinel `{"event":"trace_config","phase":"init","enabled":true,"events_enabled":true,"event_limit":200}` and, if active-path event tracing works, sampled miss/upload/record/evict/later_access/repeat_upload events.
+Agent hypothesis: If the deployed runtime binary, remote environment, and full-log capture are all correct, the extractor should see at least the trace_config sentinel. If trace_config appears without data events, event emission guards or active-path instrumentation are missing. If no events appear, binary/env/log capture is not proven.
+Chosen optimization direction: Diagnostic-only trace plumbing verification; no optimization patch.
+Files inspected: results/runs/s6_harness_v1_1_trace_plumbing_fasttemp_p16_d16/adapter_manifest.json; metrics.json; adapter_check.json; logs/qwen2_td_qnn_remote.sh; logs/qwen2_td_qnn.log; state_trace_summary.json; scripts/backends/qwen2_td_qnn.sh; /home/liuxu/projects/mllm/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+Files modified: ITERATIONS.md only.
+Change summary: Ran the requested benchmark adapter command, extracted state_trace.jsonl/state_trace_summary.json, verified generated remote env exports, checked pulled full-log path, and compared deployed phone runner md5 against local runtime runner candidates.
+Benchmark command: python3 harness/benchmark_adapter.py run --label s6_harness_v1_1_trace_plumbing_fasttemp_p16_d16 --runtime /home/liuxu/projects/mllm --stage s6_harness_v1_1_trace_plumbing --profile day_smoke_p16_d16 --trace-residency --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENTS=1 --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENT_LIMIT=200
+Extraction command: python3 harness/extract_state_trace.py --log results/runs/s6_harness_v1_1_trace_plumbing_fasttemp_p16_d16/logs/qwen2_td_qnn.log --out-jsonl results/runs/s6_harness_v1_1_trace_plumbing_fasttemp_p16_d16/state_trace.jsonl --out-summary results/runs/s6_harness_v1_1_trace_plumbing_fasttemp_p16_d16/state_trace_summary.json
+Compile result: success; adapter_check valid=true.
+Correctness result: correct=true; generated_tokens=16.0; runs=1.
+Metrics:
+  decode_tok_s: 0.32
+  mib_per_token: 4673.9419375
+  required_miss_count: 22032.0
+  upload_bytes: 78415733456.896
+  prewarm_hit_rate: 1.0
+  eviction_churn: 21360.0
+  required_miss_wait_ms_per_token: 4989.682625
+  cache_hit_rate: 0.3169642857142857
+Trace extraction:
+  state_trace_summary: results/runs/s6_harness_v1_1_trace_plumbing_fasttemp_p16_d16/state_trace_summary.json
+  events: 0
+  event_counts: {}
+  trace_config_present: false
+  state_trace_jsonl_size: 0 bytes
+Plumbing checks:
+  remote_script: results/runs/s6_harness_v1_1_trace_plumbing_fasttemp_p16_d16/logs/qwen2_td_qnn_remote.sh
+  env_in_remote_script: MLLM_QNN_TD_RESIDENCY_TRACE=1, MLLM_QNN_TD_RESIDENCY_TRACE_EVENTS=1, MLLM_QNN_TD_RESIDENCY_TRACE_EVENT_LIMIT=200
+  pulled_log_path: results/runs/s6_harness_v1_1_trace_plumbing_fasttemp_p16_d16/logs/qwen2_td_qnn.log
+  pulled_log_size: 14710494 bytes
+  phone_log_path: /data/local/tmp/qwen2_moe_td_w8a16_clean_20260527/qwen2_td_qnn_mobile_moe_ako.log
+  phone_log_mtime: 2026-07-04 17:15
+  deployed_phone_runner_md5: d785a7c894398210a77d1439872d6664
+  local_runtime_runner_md5s_checked:
+    /home/liuxu/projects/mllm/build/examples/qwen2_moe_td_qnn_aot/mllm-qwen2-moe-td-qnn-aot-runner = 2c8e29a940685220cf34ada803703818
+    /home/liuxu/projects/mllm/build-qnn-aot/bin/mllm-qwen2-moe-td-qnn-aot-runner = f281484c395755696460f84270860ccd
+    /home/liuxu/projects/mllm/build-android-arm64-v8a-qnn/bin/mllm-qwen2-moe-td-qnn-aot-runner = bc69814332ecfa88cdeeddad105eb6eb
+  binary_provenance: not proven; deployed phone runner md5 does not match the checked local `/home/liuxu/projects/mllm` runner candidates.
+Result: diagnostic_harness_failure: events=0. Per decision rule, binary/env/log capture is not fully proven. Env export and pulled full-log path are proven; deployed binary provenance is not proven by md5.
+Agent diagnosis: The benchmark ran and the pulled log is current/full-sized, but the extractor found zero `[TD-RES-TRACE]` lines and no trace_config sentinel. The generated remote script did export the residency trace env knobs, so this is not explained by missing requested env in the script. The most concrete failed plumbing check is binary provenance: the phone-side runner md5 differs from all checked local runtime runner candidates, and the captured log source paths reference `/home/liuxu/projects/mllm_s6_harness_v0_bounded_flow/...` rather than the expected `/home/liuxu/projects/mllm` tree.
+My diagnosis: Treat the previous zero-event result as unproven deploy/binary plumbing, not as evidence that active-path instrumentation guards are missing. Before changing runtime policy or event-emission logic, push or otherwise verify the exact `/home/liuxu/projects/mllm` branch binary that contains the trace_config sentinel, then rerun the same V1.1 extraction.
+Needed expert knowledge: Need the intended build/deploy path for the Qwen2 TD QNN AOT runner under this harness, including which local binary should be pushed to `/data/local/tmp/qwen2_moe_td_w8a16_clean_20260527/mllm-qwen2-moe-td-qnn-aot-runner` and whether the harness should verify/push it before trace-plumbing runs.
+Patch / commit: No optimization patch; no runtime edits. Diagnostic artifacts are in results/runs/s6_harness_v1_1_trace_plumbing_fasttemp_p16_d16/.
+
+## s6_harness_v1_1_trace_plumbing_recheck_fasttemp_p16_d16
+
+Iteration ID: s6_harness_v1_1_trace_plumbing_recheck_fasttemp_p16_d16
+Stage: s6_harness_v1_1_trace_plumbing
+Agent prompt setting: S6 Harness V1.1 Trace Plumbing Recheck after binary provenance fix; diagnostic-only, no optimization and no instrumentation changes.
+Targeted bottleneck: Binary/deploy provenance for `[TD-RES-TRACE]` event-level state-relation logging.
+Expected diagnostic movement: After rebuilding `/home/liuxu/projects/mllm` branch `exp/s6-residency-event-trace-v1` commit `f4a73850` and deploying the exact runner to the harness phone path, the pulled log should include the trace_config sentinel and, if event tracing works, data events.
+Agent hypothesis: The previous zero-event result was caused by stale or mismatched phone runner provenance, not by an event-trace schema failure. An md5-matched deploy should restore trace_config and event data if env/log plumbing is otherwise correct.
+Chosen optimization direction: Diagnostic-only build/deploy provenance recheck; no runtime-policy optimization patch.
+Files inspected: /home/liuxu/projects/mllm git state; build-android-arm64-v8a-qnn runner artifact; phone runner md5/stat; results/runs/s6_harness_v1_1_trace_plumbing_recheck_fasttemp_p16_d16/metrics.json; adapter_check.json; summary.jsonl; logs/qwen2_td_qnn.log; state_trace.jsonl; state_trace_summary.json.
+Files modified: results/runs/s6_harness_v1_1_trace_plumbing_recheck_fasttemp_p16_d16/state_relation.event_level.json; ITERATIONS.md.
+Change summary: Rebuilt the Qwen2 TD QNN AOT runner from `/home/liuxu/projects/mllm` at commit `f4a73850`, pushed that exact artifact to `/data/local/tmp/qwen2_moe_td_w8a16_clean_20260527/mllm-qwen2-moe-td-qnn-aot-runner`, verified host/phone md5 equality and phone stat, reran the V1.1 trace plumbing harness, extracted event traces, and wrote an event-level state-relation summary.
+Build command: cmake --build /home/liuxu/projects/mllm/build-android-arm64-v8a-qnn --target mllm-qwen2-moe-td-qnn-aot-runner -j8
+Build result: success; warnings only.
+Runtime branch/commit: exp/s6-residency-event-trace-v1 / f4a7385063e34ba9c952768a3bc0b341755e79fd
+Host runner: /home/liuxu/projects/mllm/build-android-arm64-v8a-qnn/bin/mllm-qwen2-moe-td-qnn-aot-runner
+Host runner md5: 0827e113dd57e1c0f34b06d12e011f91
+Host runner size/mode: 37248568 bytes; 0775/-rwxrwxr-x
+Phone runner: /data/local/tmp/qwen2_moe_td_w8a16_clean_20260527/mllm-qwen2-moe-td-qnn-aot-runner
+Phone runner md5: 0827e113dd57e1c0f34b06d12e011f91
+Host md5 == phone md5: true
+Phone stat path/size/mode: /data/local/tmp/qwen2_moe_td_w8a16_clean_20260527/mllm-qwen2-moe-td-qnn-aot-runner; 37248568 bytes; 0777/-rwxrwxrwx; uid/gid shell/shell.
+Benchmark command: python3 harness/benchmark_adapter.py run --label s6_harness_v1_1_trace_plumbing_recheck_fasttemp_p16_d16 --runtime /home/liuxu/projects/mllm --stage s6_harness_v1_1_trace_plumbing --profile day_smoke_p16_d16 --trace-residency --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENTS=1 --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENT_LIMIT=200
+Extraction command: python3 harness/extract_state_trace.py --log results/runs/s6_harness_v1_1_trace_plumbing_recheck_fasttemp_p16_d16/logs/qwen2_td_qnn.log --out-jsonl results/runs/s6_harness_v1_1_trace_plumbing_recheck_fasttemp_p16_d16/state_trace.jsonl --out-summary results/runs/s6_harness_v1_1_trace_plumbing_recheck_fasttemp_p16_d16/state_trace_summary.json
+Compile result: success; adapter_check valid=true.
+Correctness result: correct=true; generated_tokens=16.0; runs=1.
+Metrics:
+  decode_tok_s: 0.33
+  mib_per_token: 4673.9419375
+  required_miss_count: 22032.0
+  upload_bytes: 78415733456.896
+  prewarm_hit_rate: None
+  eviction_churn: 21360.0
+  required_miss_wait_ms_per_token: 5022.31775
+  cache_hit_rate: 0.3169642857142857
+  hybrid_res_probe: 32256
+  hybrid_res_hit: 10224
+  hybrid_res_miss: 22032
+  hybrid_res_mat_req: 22032
+  hybrid_res_upload: 7344
+  hybrid_res_dup_upload: 4642
+  hybrid_res_record: 22032
+  hybrid_res_evict: 21360
+  hybrid_res_later_sibling_miss: 14688
+  hybrid_res_later_sibling_hit: 6816
+Trace extraction:
+  state_trace_jsonl: results/runs/s6_harness_v1_1_trace_plumbing_recheck_fasttemp_p16_d16/state_trace.jsonl
+  state_trace_summary: results/runs/s6_harness_v1_1_trace_plumbing_recheck_fasttemp_p16_d16/state_trace_summary.json
+  state_relation_event_level: results/runs/s6_harness_v1_1_trace_plumbing_recheck_fasttemp_p16_d16/state_relation.event_level.json
+  events: 202
+  trace_config_present: true
+  trace_config: {"event":"trace_config","phase":"init","enabled":true,"events_enabled":true,"event_limit":200}
+  data_events_present: true
+  event_counts: {"trace_config": 2, "miss": 32, "upload": 32, "record": 80, "later_access": 56}
+  action_counts: {"probe": 88, "upload": 32, "record": 80, "unknown": 2}
+  phase_counts: {"init": 2, "required_decode": 200}
+  logical_keys_seen: 120
+  physical_keys_seen: 32
+Result: event_level_tracing_working. The zero-event V1/V1.1 failure was a binary provenance/deploy problem, not an event-trace schema failure.
+Agent diagnosis: Once the phone runner md5 matched the rebuilt host runner from `/home/liuxu/projects/mllm` commit `f4a73850`, the same harness/env/log path emitted and captured `[TD-RES-TRACE]` lines. The pulled log includes the trace_config sentinel at `aot_run.cpp:2663` and data events at `aot_run.cpp:6058`. The event sample includes miss/upload/record/later_access events under `required_decode`.
+My diagnosis: Binary, env, and log capture are now proven for V1.1 trace plumbing. This rules out event-trace schema failure for the prior zero-event run. Data events appearing means there is no active-path instrumentation blocker for the sampled path. The remaining state-relation limitation is sample coverage: aggregate counters report `hybrid_res_dup_upload=4642` and `hybrid_res_evict=21360`, while the 200-event data sample did not include repeat_upload or evict events, so duplicate-upload causality still needs a larger or targeted trace sample before optimization.
+Needed expert knowledge: Need a sampling strategy or event-limit setting that captures repeat_upload and evict/invalidation events when the next diagnostic asks for duplicate-upload causality. No runtime-policy edit is justified by this trace-plumbing run alone.
+Patch / commit: No optimization patch and no instrumentation change. Diagnostic artifact written at results/runs/s6_harness_v1_1_trace_plumbing_recheck_fasttemp_p16_d16/state_relation.event_level.json.

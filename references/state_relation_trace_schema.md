@@ -85,6 +85,17 @@ inspect examples instead of scanning raw logs.
 
 ## Acceptance Discipline
 
+Before interpreting missing event traces, verify binary provenance:
+
+```text
+host runner md5 == phone runner md5
+phone runner path/stat recorded
+runtime branch/commit recorded
+```
+
+If md5 does not match, classify the result as `binary_provenance_invalid`, not
+as an event-trace schema or active-path instrumentation failure.
+
 If `trace_config` is missing, debug build/deploy/env/log capture before drawing
 state-relation conclusions. If `trace_config` is present but no data events
 appear, debug active-path instrumentation or event-emission guards.

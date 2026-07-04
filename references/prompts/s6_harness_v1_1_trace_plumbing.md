@@ -18,6 +18,20 @@ The runtime must include the `trace_config` sentinel event:
 {"event":"trace_config","phase":"init","enabled":true,"events_enabled":true,"event_limit":200}
 ```
 
+Before interpreting missing events, verify binary provenance:
+
+```text
+host runner md5
+phone runner md5
+host md5 == phone md5
+phone runner path/size/mode
+runtime branch/commit
+```
+
+If host and phone runner md5 do not match, classify the run as
+`binary_provenance_invalid`, rebuild/deploy the expected runner, and rerun this
+diagnostic before changing instrumentation.
+
 Run:
 
 ```bash
@@ -44,8 +58,9 @@ Decision:
 
 ```text
 events=0:
-  binary/env/log capture is not proven. Check deployed binary md5, remote env,
-  and pulled full log path.
+  if host/phone md5 mismatch, classify binary_provenance_invalid;
+  otherwise binary/env/log capture is not proven. Check deployed binary md5,
+  remote env, and pulled full log path.
 
 trace_config present but no data events:
   binary/env/log plumbing works. Active-path instrumentation or event-emission
