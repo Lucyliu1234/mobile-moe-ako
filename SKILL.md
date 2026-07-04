@@ -198,9 +198,20 @@ record the contract change.
 
 ### 6. Run Candidate Through The Same Adapter
 
+If the candidate changed runtime code, build the runner, push it to the phone,
+chmod it, and verify host md5 equals phone md5 before benchmarking. The
+benchmark adapter pushes only the remote shell script and collects logs; it does
+not guarantee that a newly built runner binary was deployed.
+
 Use the same benchmark profile and trace settings as baseline. Pass
 `--baseline-metrics` when using the adapter. Generate the same trace/profile
 artifacts for the candidate when they are relevant to interpreting the result.
+
+If a candidate launch fails with `Text file busy`, missing generated tokens, or
+another pre-execution device/deploy error, classify the run as invalid. Do not
+accept or reject the patch as a performance result until the runner has been
+md5-verified on the phone and the exact same adapter command has produced
+comparable metrics.
 
 ### 7. Run The Acceptance Gate
 

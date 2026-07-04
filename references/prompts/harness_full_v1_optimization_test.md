@@ -32,6 +32,8 @@ Important constraints:
   `references/benchmark_instructions.md`.
 - Use `day_smoke_p16_d16` for the baseline and every normal candidate
   iteration. Use `day_signal_p32_d32` only after a p16/d16 patch is accepted.
+- Before benchmarking any candidate that changes runtime code, build/deploy the
+  runner and verify host md5 equals phone md5.
 - Use event trace in the baseline and candidate runs when the runtime binary
   supports it.
 - The harness should provide profiling facts and an empty boundary form, not
@@ -82,6 +84,8 @@ acceptance gate -> commit 或 archive。
 - 使用 `references/benchmark_instructions.md` 里的手机 benchmark 命令模板。
 - baseline 和每个普通 candidate iteration 都使用 `day_smoke_p16_d16`。
   只有 p16/d16 patch 被接受后，才使用 `day_signal_p32_d32`。
+- 对任何修改 runtime code 的 candidate，在 benchmark 前必须 build/deploy runner，
+  并验证 host md5 和 phone md5 一致。
 - 如果 runtime binary 支持，在 baseline 和 candidate 中都启用 event trace。
 - Harness 只提供 profiling facts 和空的 boundary form，不提供固定瓶颈类别或建议病因。
 - Agent 必须根据 profile facts 和代码检查自己推断 boundary，并在 patch 前填写

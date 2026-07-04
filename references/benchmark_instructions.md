@@ -57,6 +57,35 @@ python3 harness/benchmark_adapter.py run \
   --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENT_LIMIT=300
 ```
 
+Before any candidate run that changes runtime code, build and deploy the runner
+explicitly. `harness/benchmark_adapter.py` pushes the remote shell script and
+collects logs, but it does not rebuild or push the runner binary.
+
+Candidate build/deploy/md5 template:
+
+```bash
+cmake --build /home/liuxu/projects/mllm/build-android-arm64-v8a-qnn \
+  --target mllm-qwen2-moe-td-qnn-aot-runner
+
+HOST_RUNNER=/home/liuxu/projects/mllm/build-android-arm64-v8a-qnn/bin/mllm-qwen2-moe-td-qnn-aot-runner
+PHONE_BASE=/data/local/tmp/qwen2_moe_td_w8a16_clean_20260527
+PHONE_RUNNER=$PHONE_BASE/mllm-qwen2-moe-td-qnn-aot-runner
+SERIAL=${AKO_SERIAL:-10.29.230.131:5555}
+
+adb -s "$SERIAL" shell "mkdir -p '$PHONE_BASE'"
+adb -s "$SERIAL" push "$HOST_RUNNER" "$PHONE_RUNNER"
+adb -s "$SERIAL" shell "chmod 0777 '$PHONE_RUNNER'"
+md5sum "$HOST_RUNNER"
+adb -s "$SERIAL" shell "md5sum '$PHONE_RUNNER' && stat -c '%s %a %F' '$PHONE_RUNNER'"
+```
+
+Record host md5, phone md5, phone size, and mode in `ITERATIONS.md`. Do not
+interpret candidate performance unless host and phone md5 match. If the phone
+reports `Text file busy`, treat the run as device/deploy invalid, wait for the
+runner to be released or check for stale runner processes, redeploy with md5
+verification, and rerun the exact same adapter command. Do not change benchmark
+settings to work around deployment instability.
+
 Accepted-patch recheck template:
 
 ```bash
