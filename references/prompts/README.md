@@ -38,3 +38,8 @@ flow. It does not rerun old S6 as A-control; instead it uses historical S6 runs
 as qualitative controls and tests whether `harness/benchmark_adapter.py`,
 `harness/localize_boundary.py`, state-relation files, and
 `harness/classify_result.py` make the loop more controllable.
+
+`s6_harness_v1_event_trace.md` is a diagnostic-harness evolution prompt. It
+tests whether sampled `[TD-RES-TRACE]` event logs and
+`harness/extract_state_trace.py` can upgrade aggregate state relations into
+per-key logical-request / physical-action evidence before optimization.

@@ -92,3 +92,20 @@ The goal is not to make the agent less capable. The goal is to make every
 exploration step auditable: the profile chooses a boundary, the boundary chooses
 code surfaces, and the benchmark verdict decides whether the patch moved the
 physical cost it claimed to control.
+
+### `extract_state_trace.py`
+
+Extracts sampled event-level state-relation logs from runtime output. The
+runtime must emit lines with the `[TD-RES-TRACE]` prefix and JSON payloads that
+follow `references/state_relation_trace_schema.md`.
+
+```bash
+python3 harness/extract_state_trace.py \
+  --log results/runs/<label>/logs/qwen2_td_qnn.log \
+  --out-jsonl results/runs/<label>/state_trace.jsonl \
+  --out-summary results/runs/<label>/state_trace_summary.json
+```
+
+Use this after `localize_boundary.py` selects a repeated-physical-work boundary
+and aggregate counters cannot identify which logical request caused which
+physical action.

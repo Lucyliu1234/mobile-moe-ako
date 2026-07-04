@@ -34,3 +34,26 @@ Status:
 Accepted as harness v0. This does not claim a new MobileMoE optimization; it
 makes future optimization attempts more auditable and less dependent on prompt
 memory.
+
+## 2026-07-04 - Add Event-Level State-Relation Trace Schema
+
+Finding:
+The B-only harness v0 run forced `bounded_task.json`, `state_relation.json`, and
+classifier-based rejection, but the state relation remained aggregate. It could
+say that repeated physical work existed, but not which logical request caused
+which physical action or whether a later miss happened before or after physical
+invalidation.
+
+Evidence:
+The S6 harness v0 bounded-flow run archived in `ITERATIONS.md` rejected an
+`accept=false` regression and reported that the remaining weakness was missing
+per-key logical/physical identity.
+
+Harness change:
+Add `references/state_relation_trace_schema.md` and
+`harness/extract_state_trace.py` so future runs can collect sampled
+`[TD-RES-TRACE]` JSON events and summarize logical-key / physical-key chains.
+
+Status:
+Accepted as harness v1 diagnostic design. This is not an optimization; it is a
+more precise observation layer for deciding which control surface is real.

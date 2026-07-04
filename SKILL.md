@@ -100,6 +100,7 @@ The MobileMoE-AKO package owns the reusable harness scaffold:
 - `harness/benchmark_adapter.py`
 - `harness/localize_boundary.py`
 - `harness/classify_result.py`
+- `harness/extract_state_trace.py`
 - `harness/harness_ledger.md`
 - `scripts/agent_bench.sh`
 - `scripts/backends/`
@@ -292,6 +293,7 @@ For harness-mediated studies, prefer the wrappers under `harness/`:
 - `harness/benchmark_adapter.py` records a run manifest and calls the same fixed benchmark entry point.
 - `harness/localize_boundary.py` turns baseline metrics into a bounded task before patching.
 - `harness/classify_result.py` compares candidate metrics against baseline metrics and emits a verdict class.
+- `harness/extract_state_trace.py` extracts sampled event-level state-relation traces from runtime logs when a repeated-work boundary needs per-key evidence.
 - `harness/harness_ledger.md` records why harness rules changed.
 
 For one-day studies, use `day_smoke_p16_d16` for most agent iterations and `day_signal_p32_d32` to recheck promising patches. Treat the evening 4-category run as the verdict benchmark, not as the per-iteration loop.
@@ -549,6 +551,7 @@ Examples:
 - `references/metrics_schema.md`: metric names and normalization.
 - `references/constraints.md`: allowed and forbidden changes.
 - `references/control_surface_localization.md`: reusable profiling-to-boundary localization rules.
+- `references/state_relation_trace_schema.md`: event-level logical-request vs physical-action trace schema.
 - `references/experiment_protocol.md`: optional staged research protocol for progressive context experiments.
 - `references/expert_hints/coremoe_required_core.md`: expert mechanisms for stages that intentionally expose domain hints; read only when the active prompt or protocol permits it.
 - `references/prompts/`: optional staged-protocol prompts; read only the prompt selected by the active protocol or user request.
