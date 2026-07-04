@@ -1,0 +1,27 @@
+diff --git a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+index c24aa0df..7ef6afc0 100644
+--- a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
++++ b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+@@ -9110,8 +9110,20 @@ __kernel void td_touch_u8(__global const uchar* src,
+         hot_core_history_[layer].current_required.clear();
+       }
+     });
+-    if (!ensureExpertsCachedBatchGpuV3(pc, ld, proj, experts, layer, proj_name,
+-                                       &slots)) {
++    bool cache_ok = false;
++    if (expert_payload_arena_ && expert_miss_full_materialize_ &&
++        pc.external_payload_arena && ld.gate_gpu_v3.loaded() &&
++        ld.up_gpu_v3.loaded() && ld.down_gpu_v3.loaded()) {
++      ProjectionCache& gate_pc = caches_.at(std::to_string(layer) + ":gate:v3");
++      ProjectionCache& up_pc = caches_.at(std::to_string(layer) + ":up:v3");
++      ProjectionCache& down_pc = caches_.at(std::to_string(layer) + ":down:v3");
++      cache_ok = ensureExpertsPackedCachedBatchGpuV3(
++          gate_pc, up_pc, down_pc, ld, experts, layer, &slots);
++    } else {
++      cache_ok = ensureExpertsCachedBatchGpuV3(pc, ld, proj, experts, layer,
++                                               proj_name, &slots);
++    }
++    if (!cache_ok) {
+       return false;
+     }
+     if (slots.size() != experts.size()) return false;

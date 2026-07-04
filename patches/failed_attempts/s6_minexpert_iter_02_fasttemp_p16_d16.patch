@@ -1,0 +1,30 @@
+diff --git a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+index c24aa0df..0fb24a94 100644
+--- a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
++++ b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+@@ -9110,6 +9110,25 @@ __kernel void td_touch_u8(__global const uchar* src,
+         hot_core_history_[layer].current_required.clear();
+       }
+     });
++    if (pc.external_payload_arena && pc.payload_base == 0 &&
++        expert_payload_arena_ && expert_miss_full_materialize_ &&
++        proj.scale12() && ld.gate_gpu_v3.loaded() && ld.up_gpu_v3.loaded() &&
++        ld.down_gpu_v3.loaded()) {
++      ProjectionCache& gate_pc = caches_.at(std::to_string(layer) + ":gate:v3");
++      ProjectionCache& up_pc = caches_.at(std::to_string(layer) + ":up:v3");
++      ProjectionCache& down_pc = caches_.at(std::to_string(layer) + ":down:v3");
++      if (!ensureExpertsPackedCachedBatchGpuV3(gate_pc, up_pc, down_pc, ld,
++                                               experts, layer, &slots)) {
++        return false;
++      }
++    } else if (pc.external_payload_arena && pc.payload_base != 0) {
++      for (int expert : experts) {
++        const auto it = pc.entries.find(expert);
++        if (it == pc.entries.end()) return false;
++        touchCacheEntry(it->second, /*is_prewarm=*/false);
++        slots.push_back(it->second.slot);
++      }
++    } else
+     if (!ensureExpertsCachedBatchGpuV3(pc, ld, proj, experts, layer, proj_name,
+                                        &slots)) {
+       return false;

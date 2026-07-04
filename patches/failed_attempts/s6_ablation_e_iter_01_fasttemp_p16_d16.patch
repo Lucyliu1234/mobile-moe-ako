@@ -1,0 +1,15 @@
+diff --git a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+index c24aa0df..0ea11087 100644
+--- a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
++++ b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+@@ -7982,10 +7982,8 @@ __kernel void td_touch_u8(__global const uchar* src,
+       entry.bytes = miss.request.bytes;
+       gate_pc.entries.emplace(miss.expert, entry);
+       CacheEntry up_entry = entry;
+-      up_entry.resource_key = miss.request.key + ":up";
+       up_pc.entries.emplace(miss.expert, up_entry);
+       CacheEntry down_entry = entry;
+-      down_entry.resource_key = miss.request.key + ":down";
+       down_pc.entries.emplace(miss.expert, down_entry);
+       if (scheduler_ != nullptr) {
+         scheduler_->touchResident(

@@ -1,0 +1,55 @@
+diff --git a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+index c24aa0df..5271c256 100644
+--- a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
++++ b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+@@ -9064,6 +9064,9 @@ __kernel void td_touch_u8(__global const uchar* src,
+           layer, proj_name, proj.layout);
+       return false;
+     }
++    ProjectionCache* full_gate_pc = nullptr;
++    ProjectionCache* full_up_pc = nullptr;
++    ProjectionCache* full_down_pc = nullptr;
+     if (expert_payload_arena_ && expert_miss_full_materialize_ &&
+         proj.scale12() && ld.gate_gpu_v3.loaded() && ld.up_gpu_v3.loaded() &&
+         ld.down_gpu_v3.loaded()) {
+@@ -9079,6 +9082,9 @@ __kernel void td_touch_u8(__global const uchar* src,
+       if (!bindExpertPayloadArenaNoLock(layer, gate_pc, up_pc, down_pc)) {
+         return false;
+       }
++      full_gate_pc = &gate_pc;
++      full_up_pc = &up_pc;
++      full_down_pc = &down_pc;
+     }
+     stats_.proj_calls++;
+     ProjectionCache& pc = getProjectionCacheGpuV3(layer, proj_name, proj, ld, experts.front());
+@@ -9110,9 +9116,27 @@ __kernel void td_touch_u8(__global const uchar* src,
+         hot_core_history_[layer].current_required.clear();
+       }
+     });
+-    if (!ensureExpertsCachedBatchGpuV3(pc, ld, proj, experts, layer, proj_name,
+-                                       &slots)) {
+-      return false;
++    bool needs_full_payload_fill = false;
++    if (full_gate_pc != nullptr && full_up_pc != nullptr &&
++        full_down_pc != nullptr) {
++      for (int expert : experts) {
++        if (pc.entries.find(expert) == pc.entries.end()) {
++          needs_full_payload_fill = true;
++          break;
++        }
++      }
++    }
++    if (needs_full_payload_fill) {
++      if (!ensureExpertsPackedCachedBatchGpuV3(
++              *full_gate_pc, *full_up_pc, *full_down_pc, ld, experts, layer,
++              &slots)) {
++        return false;
++      }
++    } else {
++      if (!ensureExpertsCachedBatchGpuV3(pc, ld, proj, experts, layer,
++                                         proj_name, &slots)) {
++        return false;
++      }
+     }
+     if (slots.size() != experts.size()) return false;
+ 

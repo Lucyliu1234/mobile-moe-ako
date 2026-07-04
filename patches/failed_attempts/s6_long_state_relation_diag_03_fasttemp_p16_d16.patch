@@ -1,0 +1,156 @@
+diff --git a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+index c24aa0df..077f0c92 100644
+--- a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
++++ b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+@@ -125,6 +125,41 @@ static void touchMmapPages(const uint8_t* base, size_t size) {
+   (void)sink;
+ }
+ 
++struct MmapResidencySample {
++  uint64_t pages = 0;
++  uint64_t resident_pages = 0;
++  int64_t elapsed_us = 0;
++};
++
++static MmapResidencySample sampleMmapResidency(const uint8_t* base,
++                                               size_t size) {
++  MmapResidencySample out;
++  if (base == nullptr || size == 0) return out;
++  const long page_size_raw = sysconf(_SC_PAGESIZE);
++  const size_t page_size =
++      page_size_raw > 0 ? static_cast<size_t>(page_size_raw) : 4096U;
++  const uintptr_t addr = reinterpret_cast<uintptr_t>(base);
++  const uintptr_t page_addr = addr - (addr % page_size);
++  const size_t page_delta = static_cast<size_t>(addr - page_addr);
++  const size_t covered = size + page_delta;
++  out.pages = static_cast<uint64_t>((covered + page_size - 1) / page_size);
++  if (out.pages == 0) return out;
++  std::vector<unsigned char> vec(static_cast<size_t>(out.pages), 0);
++  const auto t0 = std::chrono::steady_clock::now();
++  const int rc =
++      mincore(reinterpret_cast<void*>(page_addr),
++              static_cast<size_t>(out.pages) * page_size, vec.data());
++  const auto t1 = std::chrono::steady_clock::now();
++  out.elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(
++                       t1 - t0)
++                       .count();
++  if (rc != 0) return out;
++  for (unsigned char v : vec) {
++    if ((v & 1U) != 0) ++out.resident_pages;
++  }
++  return out;
++}
++
+ // ─────────────────────────────────────────────────────────────────────────────
+ // Optimisation 3: Tiered storage – mmap expert cores, pin only 2 layers.
+ //
+@@ -1517,6 +1552,14 @@ struct HybridGpuShadowStats {
+   int64_t core_staging_pack_us = 0;
+   int64_t core_page_touch_us = 0;
+   uint64_t core_page_touch_bytes = 0;
++  int64_t upload_attr_mincore_before_us = 0;
++  int64_t upload_attr_mincore_after_us = 0;
++  uint64_t upload_attr_pages_before = 0;
++  uint64_t upload_attr_resident_before = 0;
++  uint64_t upload_attr_pages_after = 0;
++  uint64_t upload_attr_resident_after = 0;
++  uint64_t upload_attr_spans = 0;
++  uint64_t upload_attr_bytes = 0;
+   int64_t core_upload_us = 0;
+   int64_t factor_upload_us = 0;
+   int64_t input_upload_us = 0;
+@@ -1735,6 +1778,20 @@ static HybridGpuShadowStats operator-(const HybridGpuShadowStats& a,
+       a.core_page_touch_us - b.core_page_touch_us;
+   d.core_page_touch_bytes =
+       a.core_page_touch_bytes - b.core_page_touch_bytes;
++  d.upload_attr_mincore_before_us =
++      a.upload_attr_mincore_before_us - b.upload_attr_mincore_before_us;
++  d.upload_attr_mincore_after_us =
++      a.upload_attr_mincore_after_us - b.upload_attr_mincore_after_us;
++  d.upload_attr_pages_before =
++      a.upload_attr_pages_before - b.upload_attr_pages_before;
++  d.upload_attr_resident_before =
++      a.upload_attr_resident_before - b.upload_attr_resident_before;
++  d.upload_attr_pages_after =
++      a.upload_attr_pages_after - b.upload_attr_pages_after;
++  d.upload_attr_resident_after =
++      a.upload_attr_resident_after - b.upload_attr_resident_after;
++  d.upload_attr_spans = a.upload_attr_spans - b.upload_attr_spans;
++  d.upload_attr_bytes = a.upload_attr_bytes - b.upload_attr_bytes;
+   d.core_upload_us = a.core_upload_us - b.core_upload_us;
+   d.factor_upload_us = a.factor_upload_us - b.factor_upload_us;
+   d.input_upload_us = a.input_upload_us - b.input_upload_us;
+@@ -6332,11 +6389,23 @@ __kernel void td_touch_u8(__global const uchar* src,
+                 pc.key, miss.expert, miss.slot);
+             return false;
+           }
++          const auto before_res =
++              sampleMmapResidency(miss.packed_payload, miss.packed_payload_bytes);
++          stats_.upload_attr_mincore_before_us += before_res.elapsed_us;
++          stats_.upload_attr_pages_before += before_res.pages;
++          stats_.upload_attr_resident_before += before_res.resident_pages;
+           const auto touch_t0 = std::chrono::steady_clock::now();
+           touchMmapPages(miss.packed_payload, miss.packed_payload_bytes);
+           const auto touch_t1 = std::chrono::steady_clock::now();
+           stats_.core_page_touch_us += hybridElapsedUs(touch_t0, touch_t1);
+           stats_.core_page_touch_bytes += miss.packed_payload_bytes;
++          const auto after_res =
++              sampleMmapResidency(miss.packed_payload, miss.packed_payload_bytes);
++          stats_.upload_attr_mincore_after_us += after_res.elapsed_us;
++          stats_.upload_attr_pages_after += after_res.pages;
++          stats_.upload_attr_resident_after += after_res.resident_pages;
++          ++stats_.upload_attr_spans;
++          stats_.upload_attr_bytes += miss.packed_payload_bytes;
+ 
+           std::vector<HybridOpenCLMaterializer::DeviceUploadSpan> span;
+           span.push_back(HybridOpenCLMaterializer::DeviceUploadSpan{
+@@ -6483,11 +6552,23 @@ __kernel void td_touch_u8(__global const uchar* src,
+       const auto total_t0 = std::chrono::steady_clock::now();
+       for (size_t i = begin; i < end; ++i) {
+         const auto& miss = misses[i];
++        const auto before_res =
++            sampleMmapResidency(miss.packed_payload, miss.packed_payload_bytes);
++        stats_.upload_attr_mincore_before_us += before_res.elapsed_us;
++        stats_.upload_attr_pages_before += before_res.pages;
++        stats_.upload_attr_resident_before += before_res.resident_pages;
+         const auto touch_t0 = std::chrono::steady_clock::now();
+         touchMmapPages(miss.packed_payload, miss.packed_payload_bytes);
+         const auto touch_t1 = std::chrono::steady_clock::now();
+         stats_.core_page_touch_us += hybridElapsedUs(touch_t0, touch_t1);
+         stats_.core_page_touch_bytes += miss.packed_payload_bytes;
++        const auto after_res =
++            sampleMmapResidency(miss.packed_payload, miss.packed_payload_bytes);
++        stats_.upload_attr_mincore_after_us += after_res.elapsed_us;
++        stats_.upload_attr_pages_after += after_res.pages;
++        stats_.upload_attr_resident_after += after_res.resident_pages;
++        ++stats_.upload_attr_spans;
++        stats_.upload_attr_bytes += miss.packed_payload_bytes;
+ 
+         std::vector<HybridOpenCLMaterializer::DeviceUploadSpan> span;
+         span.push_back(HybridOpenCLMaterializer::DeviceUploadSpan{
+@@ -17136,6 +17217,10 @@ class Qwen2MoeTDRunner {
+         "req_mat_ms={:.3f} req_mat_enqueue_ms={:.3f} req_mat_finish_ms={:.3f} "
+         "req_mat_writes={} staging_pack_ms={:.3f} staging_pack_mib={:.3f} "
+         "req_page_touch_ms={:.3f} req_page_touch_mib={:.3f} "
++        "upload_attr_mincore_before_ms={:.3f} upload_attr_mincore_after_ms={:.3f} "
++        "upload_attr_pages_before={} upload_attr_resident_before={} "
++        "upload_attr_pages_after={} upload_attr_resident_after={} "
++        "upload_attr_spans={} upload_attr_mib={:.3f} "
+         "host_ret_hit=0 host_ret_miss=0 host_ret_bytes_mib=0.000 "
+         "req_service_ms={:.3f} "
+         "req_payload_mib={:.3f} req_mat_mib={:.3f} "
+@@ -17170,6 +17255,14 @@ class Qwen2MoeTDRunner {
+         static_cast<double>(gd.core_staging_pack_bytes) / (1024.0 * 1024.0),
+         static_cast<double>(gd.core_page_touch_us) / 1000.0,
+         static_cast<double>(gd.core_page_touch_bytes) / (1024.0 * 1024.0),
++        static_cast<double>(gd.upload_attr_mincore_before_us) / 1000.0,
++        static_cast<double>(gd.upload_attr_mincore_after_us) / 1000.0,
++        gd.upload_attr_pages_before,
++        gd.upload_attr_resident_before,
++        gd.upload_attr_pages_after,
++        gd.upload_attr_resident_after,
++        gd.upload_attr_spans,
++        static_cast<double>(gd.upload_attr_bytes) / (1024.0 * 1024.0),
+         static_cast<double>(gd.required_miss_service_us) / 1000.0,
+         static_cast<double>(gd.required_payload_bytes) / (1024.0 * 1024.0),
+         static_cast<double>(gd.required_materialize_bytes) / (1024.0 * 1024.0),

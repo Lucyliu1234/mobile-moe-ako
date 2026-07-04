@@ -1,0 +1,32 @@
+diff --git a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+index c24aa0df..84a3b0eb 100644
+--- a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
++++ b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+@@ -6467,6 +6467,8 @@ __kernel void td_touch_u8(__global const uchar* src,
+     for (size_t i = begin; i < end; ++i) request.bytes += misses[i].request.bytes;
+     const bool interleaved_page_touch =
+         core_page_touch_mode_ == 2 && gate_pc.payload_arena != nullptr;
++    const bool skip_explicit_touch =
++        td_env_bool("MLLM_QNN_TD_HYBRID_GPU_SKIP_EXPLICIT_PAGE_TOUCH", true);
+     bool all_have_packed_payload = interleaved_page_touch;
+     if (all_have_packed_payload) {
+       for (size_t i = begin; i < end; ++i) {
+@@ -6483,11 +6485,13 @@ __kernel void td_touch_u8(__global const uchar* src,
+       const auto total_t0 = std::chrono::steady_clock::now();
+       for (size_t i = begin; i < end; ++i) {
+         const auto& miss = misses[i];
+-        const auto touch_t0 = std::chrono::steady_clock::now();
+-        touchMmapPages(miss.packed_payload, miss.packed_payload_bytes);
+-        const auto touch_t1 = std::chrono::steady_clock::now();
+-        stats_.core_page_touch_us += hybridElapsedUs(touch_t0, touch_t1);
+-        stats_.core_page_touch_bytes += miss.packed_payload_bytes;
++        if (!skip_explicit_touch) {
++          const auto touch_t0 = std::chrono::steady_clock::now();
++          touchMmapPages(miss.packed_payload, miss.packed_payload_bytes);
++          const auto touch_t1 = std::chrono::steady_clock::now();
++          stats_.core_page_touch_us += hybridElapsedUs(touch_t0, touch_t1);
++          stats_.core_page_touch_bytes += miss.packed_payload_bytes;
++        }
+ 
+         std::vector<HybridOpenCLMaterializer::DeviceUploadSpan> span;
+         span.push_back(HybridOpenCLMaterializer::DeviceUploadSpan{

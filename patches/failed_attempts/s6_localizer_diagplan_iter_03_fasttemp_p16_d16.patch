@@ -1,0 +1,30 @@
+diff --git a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+index 1ff83ab2..2d3da357 100644
+--- a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
++++ b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+@@ -10038,12 +10038,24 @@ class Qwen2MoeTDRunner {
+         hybrid_gpu_topk_arena_base_capacity;
+     if (hybrid_gpu_core_arena_budget_mib_ >= 3072) {
+       hybrid_gpu_topk_arena_capacity_target_ = std::min(
+-          cfg_.num_experts, hybrid_gpu_topk_arena_base_capacity + 2);
++          cfg_.num_experts, hybrid_gpu_topk_arena_base_capacity + 1);
+     }
+     hybrid_gpu_topk_arena_policy_active_ =
+         hybrid_gpu_auto_arena_capacity_ && hybrid_gpu_hot_resident_core_ &&
+         hybrid_gpu_core_arena_budget_mib_ > 0 &&
+         hybrid_gpu_core_arena_budget_mib_ <= 4096;
++    if (!hybrid_gpu_auto_arena_capacity_ &&
++        hybrid_gpu_hot_resident_core_ &&
++        hybrid_gpu_core_arena_budget_mib_ >= 3072 &&
++        hybrid_gpu_core_arena_budget_mib_ <= 4096 &&
++        hybrid_gpu_cache_capacity_ < hybrid_gpu_topk_arena_capacity_target_) {
++      MLLM_WARN(
++          "[TD-RUN][hybrid-gpu] hot arena residency floor: cache_capacity "
++          "{} -> {} for constrained core arena budget {} MiB.",
++          hybrid_gpu_cache_capacity_, hybrid_gpu_topk_arena_capacity_target_,
++          hybrid_gpu_core_arena_budget_mib_);
++      hybrid_gpu_cache_capacity_ = hybrid_gpu_topk_arena_capacity_target_;
++    }
+     if (hybrid_gpu_topk_arena_policy_active_) {
+       const bool should_apply_capacity_target =
+           !hybrid_gpu_cache_capacity_explicit ||

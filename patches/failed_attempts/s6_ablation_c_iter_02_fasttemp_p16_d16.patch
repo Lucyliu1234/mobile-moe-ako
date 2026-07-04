@@ -1,0 +1,62 @@
+diff --git a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+index c24aa0df..be7b9c9a 100644
+--- a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
++++ b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+@@ -6481,6 +6481,8 @@ __kernel void td_touch_u8(__global const uchar* src,
+       HybridOpenCLMaterializer::Result total;
+       total.ok = true;
+       const auto total_t0 = std::chrono::steady_clock::now();
++      std::vector<HybridOpenCLMaterializer::DeviceUploadSpan> spans;
++      spans.reserve(end - begin);
+       for (size_t i = begin; i < end; ++i) {
+         const auto& miss = misses[i];
+         const auto touch_t0 = std::chrono::steady_clock::now();
+@@ -6489,43 +6491,20 @@ __kernel void td_touch_u8(__global const uchar* src,
+         stats_.core_page_touch_us += hybridElapsedUs(touch_t0, touch_t1);
+         stats_.core_page_touch_bytes += miss.packed_payload_bytes;
+ 
+-        std::vector<HybridOpenCLMaterializer::DeviceUploadSpan> span;
+-        span.push_back(HybridOpenCLMaterializer::DeviceUploadSpan{
++        spans.push_back(HybridOpenCLMaterializer::DeviceUploadSpan{
+             gate_pc.payload_arena, miss.packed_payload,
+             static_cast<size_t>(miss.slot) * gate_pc.payload_stride,
+             miss.packed_payload_bytes, "core_expert_payload"});
+-        const auto enq = materializer_.enqueueDeviceSpans(span);
+-        total.bytes += enq.bytes;
+-        total.elapsed_us += enq.elapsed_us;
+-        total.nonblocking_enqueue_us += enq.nonblocking_enqueue_us;
+-        total.write_calls += enq.write_calls;
+-        total.max_write_bytes =
+-            std::max(total.max_write_bytes, enq.max_write_bytes);
+-        if (!enq.ok) {
+-          if (elapsed_us != nullptr) {
+-            *elapsed_us = hybridElapsedUs(total_t0,
+-                                          std::chrono::steady_clock::now());
+-          }
+-          stats_.core_upload_enqueue_us += total.nonblocking_enqueue_us;
+-          stats_.core_upload_write_calls += total.write_calls;
+-          MLLM_ERROR(
+-              "[TD-RUN][hybrid-gpu-v3] core expert payload enqueue failed key={} tag={} misses={} err={} bytes={}",
+-              request.key, request.tag, end - begin, enq.err, total.bytes);
+-          return false;
+-        }
+       }
+-      const auto finish = materializer_.finishDeviceUploads();
+-      total.finish_wait_us += finish.finish_wait_us;
+-      total.elapsed_us =
+-          hybridElapsedUs(total_t0, std::chrono::steady_clock::now());
++      total = materializer_.uploadDeviceSpans(spans);
+       if (elapsed_us != nullptr) *elapsed_us = total.elapsed_us;
+       stats_.core_upload_enqueue_us += total.nonblocking_enqueue_us;
+       stats_.core_upload_finish_us += total.finish_wait_us;
+       stats_.core_upload_write_calls += total.write_calls;
+-      if (!finish.ok) {
++      if (!total.ok) {
+         MLLM_ERROR(
+-            "[TD-RUN][hybrid-gpu-v3] core expert payload finish failed key={} tag={} misses={} err={} bytes={}",
+-            request.key, request.tag, end - begin, finish.err, total.bytes);
++            "[TD-RUN][hybrid-gpu-v3] core expert payload upload failed key={} tag={} misses={} err={} bytes={}",
++            request.key, request.tag, end - begin, total.err, total.bytes);
+         return false;
+       }
+       return true;

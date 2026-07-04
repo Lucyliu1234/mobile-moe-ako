@@ -1,0 +1,22 @@
+diff --git a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+index 1ff83ab2..2d6dd44a 100644
+--- a/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
++++ b/examples/qwen2_moe_td_qnn_aot/aot_run.cpp
+@@ -10047,7 +10047,7 @@ class Qwen2MoeTDRunner {
+     if (hybrid_gpu_topk_arena_policy_active_) {
+       const bool should_apply_capacity_target =
+           !hybrid_gpu_cache_capacity_explicit ||
+-          hybrid_gpu_cache_capacity_ > hybrid_gpu_topk_arena_capacity_target_;
++          hybrid_gpu_cache_capacity_ != hybrid_gpu_topk_arena_capacity_target_;
+       if (should_apply_capacity_target &&
+           hybrid_gpu_cache_capacity_ !=
+               hybrid_gpu_topk_arena_capacity_target_) {
+@@ -10057,7 +10057,7 @@ class Qwen2MoeTDRunner {
+             "per-layer/per-projection arenas resident near the true topK "
+             "working set, with a small hot slack when the 3GB-class budget can "
+             "hold it. Set MLLM_QNN_TD_HYBRID_GPU_AUTO_ARENA_CAPACITY=0 to keep "
+-            "the explicit capacity{}.",
++            "the requested capacity{}.",
+             hybrid_gpu_cache_capacity_, hybrid_gpu_topk_arena_capacity_target_,
+             hybrid_gpu_core_arena_budget_mib_,
+             hybrid_gpu_cache_capacity_explicit ? "" : " default");
