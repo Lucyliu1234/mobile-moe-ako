@@ -36,6 +36,28 @@ The harness prints and stores one normalized metrics JSON per run.
 - `decode_req_mat_writes`: decode-phase required payload write count.
 - `decode_req_page_touch_mib`: decode-phase payload MiB covered by page-touch accounting.
 - `decode_core_upload_mib`: decode-phase core payload MiB uploaded.
+- `decode_req_mat_mib`: decode-phase required materialization MiB.
+- `decode_req_payload_mib`: decode-phase required payload MiB.
+- `decode_payload_weight_mib`: decode-phase packed payload weight MiB when layer-level logs are parsed.
+- `decode_payload_scale_mib`: decode-phase packed payload scale MiB when layer-level logs are parsed.
+- `decode_factor_upload_mib`: decode-phase factor upload MiB.
+- `decode_input_upload_mib`: decode-phase input upload MiB.
+- `decode_download_mib`: decode-phase download MiB.
+- `decode_total_ms`: decode-phase hybrid cold total wall time from layer-level logs or aggregate logs.
+- `decode_gpu_total_ms`: decode-phase GPU executor total time from layer-level logs.
+- `decode_upload_ms`: decode-phase upload time from aggregate logs.
+- `decode_transfer_ms`: decode-phase transfer time when the runtime exposes it.
+- `decode_read_ms`: decode-phase host/resource read time.
+- `decode_core_upload_ms`: decode-phase core payload materialization/upload time.
+- `decode_factor_upload_ms`: decode-phase factor upload time.
+- `decode_input_upload_ms`: decode-phase input upload time.
+- `decode_meta_ms`: decode-phase metadata/setup time.
+- `decode_download_ms`: decode-phase download time.
+- `decode_kernel_ms`: decode-phase kernel time.
+- `decode_kernel_events`: optional count of kernel-timing events.
+- `decode_kernel_total_ms`: optional kernel timing total from detailed kernel events.
+- `decode_kernel_gate_ms`, `decode_kernel_up_ms`, `decode_kernel_down_ms`, `decode_kernel_factor_ms`, `decode_kernel_silu_ms`, `decode_kernel_qdq_ms`, `decode_kernel_reduce_ms`, `decode_kernel_other_ms`: optional kernel-stage breakdown.
+- `decode_hybrid_lines`: number of layer-level `[TD-RUN][hybrid-cold]` lines summarized into decode-phase totals.
 - `decode_req_miss`: decode-phase required miss count.
 - `decode_req_hit`: decode-phase required hit count.
 - `decode_evict`: decode-phase eviction count.
@@ -71,6 +93,17 @@ Stage boundary:
 - state-level residency trace when enabled: `res_probe`, `res_hit`, `res_miss`, `res_mat_req`, `res_upload`, `res_dup_upload`, `res_record`, `res_evict`, `res_base_record`, `res_sibling_missing`, `res_later_sibling_miss`, `res_later_sibling_hit`
 - churn: `eviction_churn`, demand evicts, hot evicts, arena/window evicts when exposed
 - prefetch usefulness: `prewarm_hit_rate`, pre-hit/pre-miss, submit/complete/skip counters when exposed
+- operator timing and compute: `decode_total_ms`, `decode_gpu_total_ms`,
+  `decode_kernel_ms`, and optional `decode_kernel_*` breakdown fields
+- upload attribution: `decode_core_upload_ms`, `decode_factor_upload_ms`,
+  `decode_input_upload_ms`, `decode_meta_ms`, `decode_download_ms`, enqueue and
+  finish timing, and corresponding MiB counters
+- page residency: `decode_req_page_touch_ms`, `decode_req_page_touch_mib`, and
+  optional mincore/page residency counters when exposed
+- ranked runtime-event profile when available: physical action hotspots,
+  logical request hotspots, resource lifetime hotspots, reuse/skip
+  effectiveness, phase/path breakdown, coverage-size counts, and physical
+  resource byte hotspots from `harness/detail_profile.py`
 - other runtime costs: lm_head, shared expert, QNN/GPU timing when exposed
 - thermal comparability: `peak_temp_skin_c_decode`, start/end skin or battery temperature when exposed
 

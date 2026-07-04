@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Classify a MobileMoE candidate run against a baseline."""
+"""Emit a simple accept/reject verdict for a MobileMoE candidate run."""
 
 from __future__ import annotations
 
@@ -34,88 +34,66 @@ def pct_delta(base: float | None, cand: float | None) -> float | None:
     return (cand - base) / base * 100.0
 
 
-def moved_down(base: dict[str, Any], cand: dict[str, Any], keys: list[str], min_pct: float) -> bool:
-    for key in keys:
-        b = num(base, key)
-        c = num(cand, key)
-        if b is not None and c is not None and b > 0 and (b - c) / b * 100.0 >= min_pct:
-            return True
-    return False
-
-
-def moved_up(base: dict[str, Any], cand: dict[str, Any], keys: list[str], min_pct: float) -> bool:
-    for key in keys:
-        b = num(base, key)
-        c = num(cand, key)
-        if b is not None and c is not None and b > 0 and (c - b) / b * 100.0 >= min_pct:
-            return True
-    return False
+def metric_deltas(base: dict[str, Any], cand: dict[str, Any]) -> dict[str, float | None]:
+    keys = [
+        "decode_tok_s",
+        "mib_per_token",
+        "decode_core_upload_mib",
+        "decode_req_mat_writes",
+        "upload_bytes",
+        "decode_req_service_ms",
+        "required_miss_wait_ms_per_token",
+        "decode_req_miss",
+        "required_miss_count",
+        "decode_evict",
+        "eviction_churn",
+    ]
+    return {key: pct_delta(num(base, key), num(cand, key)) for key in keys}
 
 
 def classify(args: argparse.Namespace) -> dict[str, Any]:
     base = load(args.baseline)
     cand = load(args.candidate)
-    speed_delta = pct_delta(num(base, "decode_tok_s"), num(cand, "decode_tok_s"))
-    service_delta = pct_delta(num(base, "decode_req_service_ms"), num(cand, "decode_req_service_ms"))
-    transfer_keys = ["mib_per_token", "decode_core_upload_mib", "decode_req_mat_writes", "upload_bytes"]
-    logical_keys = ["decode_req_miss", "required_miss_count", "decode_evict", "eviction_churn"]
-    service_keys = ["decode_req_service_ms", "required_miss_wait_ms_per_token"]
+    deltas = metric_deltas(base, cand)
+    speed_delta = deltas["decode_tok_s"]
 
-    reasons: list[str] = []
-    result = "no_signal"
+    guardrail_failures: list[str] = []
+    guardrail_warnings: list[str] = []
+    notes: list[str] = []
+    verdict = "inconclusive"
     accept = False
 
     if cand.get("compile_success") is False or cand.get("correct") is not True:
-        result = "invalid"
-        reasons.append("candidate failed compile/correctness guardrail")
-    elif speed_delta is not None and speed_delta <= -args.regression_pct:
-        result = "regression"
-        reasons.append(f"decode_tok_s changed {speed_delta:.2f}%")
-    elif moved_up(base, cand, ["mib_per_token"], args.transfer_regression_pct):
-        result = "regression"
-        reasons.append("normalized transfer volume regressed")
+        verdict = "invalid"
+        guardrail_failures.append("candidate failed compile/correctness guardrail")
+    elif speed_delta is None:
+        verdict = "invalid"
+        guardrail_failures.append("decode_tok_s missing or not comparable")
+    elif speed_delta <= -args.regression_pct:
+        verdict = "reject"
+        guardrail_failures.append(f"decode_tok_s regressed {speed_delta:.2f}%")
+    elif speed_delta >= args.speedup_pct:
+        verdict = "accept"
+        accept = True
+        notes.append(f"decode_tok_s improved {speed_delta:.2f}%")
     else:
-        physical_down = moved_down(base, cand, transfer_keys, args.physical_move_pct)
-        service_down = moved_down(base, cand, service_keys, args.service_move_pct)
-        logical_down = moved_down(base, cand, logical_keys, args.logical_move_pct)
-        page_touch_down = moved_down(base, cand, ["decode_req_page_touch_ms"], args.service_move_pct)
-        enqueue_up = moved_up(base, cand, ["decode_req_mat_enqueue_ms", "decode_req_mat_finish_ms"], args.service_move_pct)
-        speed_good = speed_delta is not None and speed_delta >= args.speedup_pct
+        verdict = "inconclusive"
+        notes.append(f"decode_tok_s movement {speed_delta:.2f}% is below accept threshold")
 
-        if logical_down and not physical_down and not service_down:
-            result = "logical_counter_only"
-            reasons.append("logical cache/miss counters moved but physical/service metrics did not")
-        elif page_touch_down and enqueue_up and not service_down:
-            result = "latency_shift"
-            reasons.append("page-touch cost moved into enqueue/finish without total service proof")
-        elif physical_down and speed_good:
-            result = "transfer_win"
-            accept = True
-            reasons.append("physical transfer metrics and primary throughput improved")
-        elif service_down and speed_good:
-            result = "scheduling_win" if args.hypothesis == "scheduling" else "true_system_win"
-            accept = True
-            reasons.append("service metrics and primary throughput improved")
-        elif speed_good and (physical_down or service_down):
-            result = "true_system_win"
-            accept = True
-            reasons.append("primary improvement has supporting physical/service movement")
-        elif speed_delta is None or abs(speed_delta) < args.speedup_pct:
-            result = "no_signal"
-            reasons.append("primary metric movement is below threshold or unavailable")
-        else:
-            result = "wrong_path"
-            reasons.append("primary movement is not supported by expected diagnostics")
+    transfer_delta = deltas.get("mib_per_token")
+    if transfer_delta is not None and transfer_delta >= args.transfer_warning_pct:
+        guardrail_warnings.append(f"mib_per_token increased {transfer_delta:.2f}%")
 
     return {
-        "class": result,
+        "verdict": verdict,
         "accept": accept,
         "hypothesis": args.hypothesis,
         "baseline": str(args.baseline),
         "candidate": str(args.candidate),
-        "decode_tok_s_delta_pct": speed_delta,
-        "decode_req_service_ms_delta_pct": service_delta,
-        "reasons": reasons,
+        "metric_deltas_pct": deltas,
+        "guardrail_failures": guardrail_failures,
+        "guardrail_warnings": guardrail_warnings,
+        "notes": notes,
     }
 
 
@@ -126,10 +104,7 @@ def main() -> None:
     parser.add_argument("--hypothesis", default="unknown")
     parser.add_argument("--speedup-pct", type=float, default=1.0)
     parser.add_argument("--regression-pct", type=float, default=1.0)
-    parser.add_argument("--physical-move-pct", type=float, default=1.0)
-    parser.add_argument("--service-move-pct", type=float, default=1.0)
-    parser.add_argument("--logical-move-pct", type=float, default=5.0)
-    parser.add_argument("--transfer-regression-pct", type=float, default=1.0)
+    parser.add_argument("--transfer-warning-pct", type=float, default=5.0)
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
 

@@ -178,31 +178,136 @@ def build_metrics(args: argparse.Namespace, rows: list[dict[str, Any]]) -> dict[
             "required_miss_service_ms_per_token_metric",
             "overall_required_miss_service_ms_per_token_metric",
         ),
-        "decode_req_page_touch_ms": avg(rows, "decode_hybrid_req_page_touch_ms"),
-        "decode_req_mat_enqueue_ms": avg(rows, "decode_hybrid_req_mat_enqueue_ms"),
-        "decode_req_mat_finish_ms": avg(rows, "decode_hybrid_req_mat_finish_ms"),
-        "decode_req_service_ms": avg(rows, "decode_hybrid_req_service_ms"),
-        "decode_req_mat_writes": avg(rows, "decode_hybrid_req_mat_writes"),
-        "decode_req_page_touch_mib": avg(rows, "decode_hybrid_req_page_touch_mib"),
-        "decode_core_upload_mib": avg(rows, "decode_hybrid_core_upload_mib"),
-        "decode_req_miss": total(rows, "decode_hybrid_req_miss"),
-        "decode_req_hit": total(rows, "decode_hybrid_req_hit"),
-        "decode_evict": total(rows, "decode_hybrid_evict"),
-        "res_probe": total(rows, "decode_hybrid_res_probe"),
-        "res_hit": total(rows, "decode_hybrid_res_hit"),
-        "res_miss": total(rows, "decode_hybrid_res_miss"),
-        "res_mat_req": total(rows, "decode_hybrid_res_mat_req"),
-        "res_upload": total(rows, "decode_hybrid_res_upload"),
-        "res_dup_upload": total(rows, "decode_hybrid_res_dup_upload"),
-        "res_record": total(rows, "decode_hybrid_res_record"),
-        "res_evict": total(rows, "decode_hybrid_res_evict"),
-        "res_base_record": total(rows, "decode_hybrid_res_base_record"),
-        "res_sibling_missing": total(rows, "decode_hybrid_res_sibling_missing"),
-        "res_later_sibling_miss": total(
-            rows, "decode_hybrid_res_later_sibling_miss"
+        "decode_req_page_touch_ms": avg_any(
+            rows, "decode_hybrid_req_page_touch_ms", "hybrid_req_page_touch"
         ),
-        "res_later_sibling_hit": total(
-            rows, "decode_hybrid_res_later_sibling_hit"
+        "decode_req_mat_enqueue_ms": avg_any(
+            rows, "decode_hybrid_req_mat_enqueue_ms", "hybrid_req_mat_enqueue"
+        ),
+        "decode_req_mat_finish_ms": avg_any(
+            rows, "decode_hybrid_req_mat_finish_ms", "hybrid_req_mat_finish"
+        ),
+        "decode_req_service_ms": avg_any(
+            rows, "decode_hybrid_req_service_ms", "hybrid_req_service"
+        ),
+        "decode_req_mat_writes": avg_any(
+            rows, "decode_hybrid_req_mat_writes", "hybrid_req_mat_writes"
+        ),
+        "decode_req_page_touch_mib": avg_any(
+            rows, "decode_hybrid_req_page_touch_mib", "hybrid_req_page_touch_mib"
+        ),
+        "decode_core_upload_mib": avg_any(
+            rows, "decode_hybrid_core_upload_mib", "hybrid_core_up"
+        ),
+        "decode_req_mat_mib": avg_any(
+            rows, "decode_hybrid_req_mat_mib", "hybrid_req_mat_mib"
+        ),
+        "decode_req_payload_mib": avg_any(
+            rows, "decode_hybrid_req_payload_mib", "hybrid_req_payload_mib"
+        ),
+        "decode_payload_weight_mib": avg_any(rows, "decode_hybrid_payload_weight_mib"),
+        "decode_payload_scale_mib": avg_any(rows, "decode_hybrid_payload_scale_mib"),
+        "decode_factor_upload_mib": avg_any(
+            rows, "decode_hybrid_factor_upload_mib", "hybrid_factor_up"
+        ),
+        "decode_input_upload_mib": avg_any(
+            rows, "decode_hybrid_input_upload_mib", "hybrid_input_up"
+        ),
+        "decode_download_mib": avg_any(rows, "decode_hybrid_download_mib", "hybrid_down"),
+        "decode_arena_resident_mib": avg_any(
+            rows, "decode_hybrid_arena_resident_mib", "hybrid_arena_resident_mib"
+        ),
+        "decode_slot_resident_mib": avg_any(
+            rows, "decode_hybrid_slot_resident_mib", "hybrid_slot_resident_mib"
+        ),
+        "decode_total_ms": avg_any(rows, "decode_hybrid_total_ms", "hybrid_total"),
+        "decode_gpu_total_ms": avg_any(rows, "decode_hybrid_gpu_total_ms"),
+        "decode_upload_ms": avg_any(rows, "decode_hybrid_upload_ms", "hybrid_upload"),
+        "decode_transfer_ms": avg_any(rows, "decode_hybrid_transfer_ms"),
+        "decode_read_ms": avg_any(rows, "decode_hybrid_read_ms", "hybrid_read"),
+        "decode_core_upload_ms": avg_any(
+            rows, "decode_hybrid_core_upload_ms", "hybrid_req_mat"
+        ),
+        "decode_factor_upload_ms": avg_any(rows, "decode_hybrid_factor_upload_ms"),
+        "decode_input_upload_ms": avg_any(rows, "decode_hybrid_input_upload_ms"),
+        "decode_meta_ms": avg_any(rows, "decode_hybrid_meta_ms", "hybrid_meta"),
+        "decode_download_ms": avg_any(rows, "decode_hybrid_download_ms"),
+        "decode_kernel_ms": avg_any(rows, "decode_hybrid_kernel_ms", "hybrid_kernel"),
+        "decode_kernel_events": avg_any(rows, "decode_hybrid_kernel_events"),
+        "decode_kernel_total_ms": avg_any(rows, "decode_hybrid_kernel_total"),
+        "decode_kernel_gate_ms": avg_any(rows, "decode_hybrid_kernel_gate"),
+        "decode_kernel_up_ms": avg_any(rows, "decode_hybrid_kernel_up"),
+        "decode_kernel_down_ms": avg_any(rows, "decode_hybrid_kernel_down"),
+        "decode_kernel_factor_ms": avg_any(rows, "decode_hybrid_kernel_factor"),
+        "decode_kernel_silu_ms": avg_any(rows, "decode_hybrid_kernel_silu"),
+        "decode_kernel_qdq_ms": avg_any(rows, "decode_hybrid_kernel_qdq"),
+        "decode_kernel_reduce_ms": avg_any(rows, "decode_hybrid_kernel_reduce"),
+        "decode_kernel_other_ms": avg_any(rows, "decode_hybrid_kernel_other"),
+        "decode_hybrid_lines": total(rows, "decode_hybrid_lines"),
+        "upload_attr_mincore_before_ms": avg_any(
+            rows,
+            "decode_hybrid_upload_attr_mincore_before_ms",
+            "hybrid_upload_attr_mincore_before_ms",
+        ),
+        "upload_attr_mincore_after_ms": avg_any(
+            rows,
+            "decode_hybrid_upload_attr_mincore_after_ms",
+            "hybrid_upload_attr_mincore_after_ms",
+        ),
+        "upload_attr_pages_before": avg_any(
+            rows,
+            "decode_hybrid_upload_attr_pages_before",
+            "hybrid_upload_attr_pages_before",
+        ),
+        "upload_attr_resident_before": avg_any(
+            rows,
+            "decode_hybrid_upload_attr_resident_before",
+            "hybrid_upload_attr_resident_before",
+        ),
+        "upload_attr_pages_after": avg_any(
+            rows,
+            "decode_hybrid_upload_attr_pages_after",
+            "hybrid_upload_attr_pages_after",
+        ),
+        "upload_attr_resident_after": avg_any(
+            rows,
+            "decode_hybrid_upload_attr_resident_after",
+            "hybrid_upload_attr_resident_after",
+        ),
+        "upload_attr_spans": avg_any(
+            rows, "decode_hybrid_upload_attr_spans", "hybrid_upload_attr_spans"
+        ),
+        "upload_attr_mib": avg_any(
+            rows, "decode_hybrid_upload_attr_mib", "hybrid_upload_attr_mib"
+        ),
+        "decode_req_miss": total_any(rows, "decode_hybrid_req_miss", "hybrid_req_miss"),
+        "decode_req_hit": total_any(rows, "decode_hybrid_req_hit", "hybrid_req_hit"),
+        "decode_evict": total_any(rows, "decode_hybrid_evict", "hybrid_evictions"),
+        "res_probe": total_any(rows, "decode_hybrid_res_probe", "hybrid_res_probe"),
+        "res_hit": total_any(rows, "decode_hybrid_res_hit", "hybrid_res_hit"),
+        "res_miss": total_any(rows, "decode_hybrid_res_miss", "hybrid_res_miss"),
+        "res_mat_req": total_any(rows, "decode_hybrid_res_mat_req", "hybrid_res_mat_req"),
+        "res_upload": total_any(rows, "decode_hybrid_res_upload", "hybrid_res_upload"),
+        "res_dup_upload": total_any(
+            rows, "decode_hybrid_res_dup_upload", "hybrid_res_dup_upload"
+        ),
+        "res_record": total_any(rows, "decode_hybrid_res_record", "hybrid_res_record"),
+        "res_evict": total_any(rows, "decode_hybrid_res_evict", "hybrid_res_evict"),
+        "res_base_record": total_any(
+            rows, "decode_hybrid_res_base_record", "hybrid_res_base_record"
+        ),
+        "res_sibling_missing": total_any(
+            rows, "decode_hybrid_res_sibling_missing", "hybrid_res_sibling_missing"
+        ),
+        "res_later_sibling_miss": total_any(
+            rows,
+            "decode_hybrid_res_later_sibling_miss",
+            "hybrid_res_later_sibling_miss",
+        ),
+        "res_later_sibling_hit": total_any(
+            rows,
+            "decode_hybrid_res_later_sibling_hit",
+            "hybrid_res_later_sibling_hit",
         ),
         "energy_j_per_token_decode": avg(rows, "energy_j_per_token_decode"),
         "peak_temp_skin_c_decode": avg(rows, "peak_temp_skin_c_decode"),

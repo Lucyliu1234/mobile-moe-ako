@@ -33,21 +33,28 @@ multiple diagnostic-only iterations, and reflection checkpoints to test whether
 previous failures were caused by short budgets or by insufficient
 localization/feedback.
 
-`s6_harness_v0_bounded_flow.md` is the B-group pilot for the AKO4X-style harness
-flow. It does not rerun old S6 as A-control; instead it uses historical S6 runs
-as qualitative controls and tests whether `harness/benchmark_adapter.py`,
-`harness/localize_boundary.py`, state-relation files, and
-`harness/classify_result.py` make the loop more controllable.
+## Old Harness Prompt Archive
 
-`s6_harness_v1_event_trace.md` is a diagnostic-harness evolution prompt. It
-tests whether sampled `[TD-RES-TRACE]` event logs and
-`harness/extract_state_trace.py` can upgrade aggregate state relations into
-per-key logical-request / physical-action evidence before optimization.
+Older harness-evolution prompts are archived under
+`references/prompts/old_harness/`.
 
-`s6_harness_v1_1_trace_plumbing.md` is a diagnostic-only follow-up for empty
-event traces. It expects a runtime `trace_config` sentinel and classifies the
-failure as binary/env/log plumbing vs active-path event instrumentation.
+Those files preserve the exact historical prompts used while developing the
+earlier `bounded_task.json` / `localize_boundary.py` style harness. They are
+kept for audit and reproduction, not as the default flow for new runs.
 
-`s6_harness_v1_1_trace_plumbing_smoke.md` is a non-overwriting smoke validation
-of the binary provenance gate added after V1.1. It uses a fresh label and should
-not run optimization patches.
+For new harness-mediated optimization tests, use the current `$mobile-moe-ako`
+skill flow:
+
+```text
+benchmark_adapter.py
+  -> extract_state_trace.py
+  -> detail_profile.py
+  -> profile_report.py
+  -> boundary_template.py
+  -> agent-filled boundary form
+  -> candidate benchmark
+  -> acceptance gate
+```
+
+The current harness should provide profiling facts and an empty boundary form;
+the agent should infer the boundary from profile evidence and code inspection.

@@ -37,18 +37,89 @@ def event_key(event: dict[str, Any], key: str) -> str:
     return str(value)
 
 
+def bool_value(event: dict[str, Any], key: str) -> bool:
+    value = event.get(key)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower() == "true"
+    return bool(value)
+
+
 def summarize(events: list[dict[str, Any]], max_examples: int) -> dict[str, Any]:
     event_counts = Counter(event_key(event, "event") for event in events)
     action_counts = Counter(event_key(event, "action") for event in events)
     phase_counts = Counter(event_key(event, "phase") for event in events)
     logical_counts = Counter(event_key(event, "logical_key") for event in events)
     physical_counts = Counter(event_key(event, "physical_key") for event in events)
+    stable_physical_counts = Counter(
+        event_key(event, "stable_physical_key") for event in events
+    )
+    invalidation_counts = Counter(
+        event_key(event, "invalidated_by") for event in events
+        if event_key(event, "event") == "evict"
+    )
+    later_access_counts = Counter(
+        event_key(event, "later_access") for event in events
+        if event_key(event, "event") == "later_access"
+    )
 
     by_physical: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    by_stable_physical: dict[str, list[dict[str, Any]]] = defaultdict(list)
     by_logical: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for event in events:
         by_physical[event_key(event, "physical_key")].append(event)
+        by_stable_physical[event_key(event, "stable_physical_key")].append(event)
         by_logical[event_key(event, "logical_key")].append(event)
+
+    derived_counts: Counter[str] = Counter()
+    derived_examples: list[dict[str, Any]] = []
+    evicted_stable: set[str] = set()
+    evicted_physical: set[str] = set()
+    for event in events:
+        name = event_key(event, "event")
+        physical_key = event_key(event, "physical_key")
+        stable_key = event_key(event, "stable_physical_key")
+        if name == "evict":
+            if stable_key != "unknown":
+                evicted_stable.add(stable_key)
+            if physical_key != "unknown":
+                evicted_physical.add(physical_key)
+            if physical_key != "unknown" or stable_key != "unknown":
+                derived_counts["keyed_evict"] += 1
+            continue
+        if name in {"upload", "repeat_upload"}:
+            if name == "repeat_upload" or bool_value(event, "duplicate"):
+                derived_counts["repeat_upload_by_physical_key"] += 1
+            if bool_value(event, "duplicate_by_stable_key"):
+                derived_counts["repeat_upload_by_stable_key"] += 1
+            continue
+        if name == "later_access" and event.get("later_access") == "miss":
+            was_covered = bool_value(event, "was_covered_by_previous_upload")
+            if was_covered:
+                if stable_key != "unknown" and stable_key in evicted_stable:
+                    relation = "later_miss_after_keyed_evict"
+                elif physical_key != "unknown" and physical_key in evicted_physical:
+                    relation = "later_miss_after_keyed_evict"
+                else:
+                    relation = "later_miss_before_keyed_evict"
+                derived_counts[relation] += 1
+                if len(derived_examples) < max_examples:
+                    derived_examples.append(
+                        {
+                            "relation": relation,
+                            "logical_key": event_key(event, "logical_key"),
+                            "physical_key": physical_key,
+                            "stable_physical_key": stable_key,
+                            "slot_id": event.get("slot_id"),
+                            "later_access": event.get("later_access"),
+                            "covered_logical_keys": event.get(
+                                "covered_logical_keys", []
+                            ),
+                        }
+                    )
+            else:
+                derived_counts["later_miss_without_known_coverage"] += 1
 
     examples: list[dict[str, Any]] = []
     for physical_key, group in by_physical.items():
@@ -102,11 +173,19 @@ def summarize(events: list[dict[str, Any]], max_examples: int) -> dict[str, Any]
         "event_counts": dict(sorted(event_counts.items())),
         "action_counts": dict(sorted(action_counts.items())),
         "phase_counts": dict(sorted(phase_counts.items())),
+        "invalidation_counts": dict(sorted(invalidation_counts.items())),
+        "later_access_counts": dict(sorted(later_access_counts.items())),
+        "derived_relation_counts": dict(sorted(derived_counts.items())),
         "logical_keys_seen": len([key for key in logical_counts if key != "unknown"]),
         "physical_keys_seen": len([key for key in physical_counts if key != "unknown"]),
+        "stable_physical_keys_seen": len(
+            [key for key in stable_physical_counts if key != "unknown"]
+        ),
         "top_logical_keys": logical_counts.most_common(max_examples),
         "top_physical_keys": physical_counts.most_common(max_examples),
+        "top_stable_physical_keys": stable_physical_counts.most_common(max_examples),
         "examples": examples[:max_examples],
+        "derived_examples": derived_examples,
     }
 
 

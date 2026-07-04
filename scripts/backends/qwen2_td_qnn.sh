@@ -207,6 +207,8 @@ decode_tokens_requested = int(sys.argv[6])
 prompt_row = json.loads(sys.argv[7]) if len(sys.argv) > 7 and sys.argv[7].strip() else {}
 text = log_path.read_text(encoding="utf-8", errors="replace") if log_path.exists() else ""
 KV_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)=([^\s]+)")
+HYBRID_COLD_RE = re.compile(r"\[TD-RUN\]\[hybrid-cold\]\s*(.*)")
+ANSI_RE = re.compile(r"\x1b\[[0-9;:]*m")
 
 def num(pattern):
     m = re.search(pattern, text, re.I)
@@ -238,6 +240,12 @@ def add_kvs(out, prefix, kv_text):
         if isinstance(value, (int, float)) and math.isfinite(float(value)):
             out[f"{prefix}_{key}"] = value
 
+def add_numeric_kvs_to_totals(out, kv_text):
+    for key, raw_value in KV_RE.findall(kv_text):
+        value = parse_value(raw_value)
+        if isinstance(value, (int, float)) and math.isfinite(float(value)):
+            out[key] = out.get(key, 0.0) + float(value)
+
 ret_matches = re.findall(r"RET:(-?\d+)", text)
 ret = int(ret_matches[-1]) if ret_matches else None
 generated = num(r"Generated tokens\s*:\s*(\d+)")
@@ -266,6 +274,24 @@ hybrid_matches = re.findall(r"Hybrid GPU shadow\s*:\s*(.*)", text)
 if hybrid_matches:
     add_kvs(hybrid, "hybrid", hybrid_matches[-1])
 
+decode_hybrid = {}
+decode_hybrid_totals = {}
+decode_hybrid_lines = 0
+in_decode_phase = False
+for line in text.splitlines():
+    line = ANSI_RE.sub("", line)
+    if "[TD-RUN][debug] generate: prefill done" in line:
+        in_decode_phase = True
+    m = HYBRID_COLD_RE.search(line)
+    if in_decode_phase and m:
+        decode_hybrid_lines += 1
+        add_numeric_kvs_to_totals(decode_hybrid_totals, m.group(1))
+if decode_hybrid_lines:
+    decode_hybrid["metric_phase"] = "decode"
+    decode_hybrid["decode_hybrid_lines"] = decode_hybrid_lines
+    for key, value in decode_hybrid_totals.items():
+        decode_hybrid[f"decode_hybrid_{key}"] = value
+
 row = {
     "baseline": "qwen2_td_qnn",
     "run_id": "qwen2_td_qnn_once",
@@ -286,19 +312,26 @@ row = {
     "local_log": str(log_path),
 }
 row.update(hybrid)
+row.update(decode_hybrid)
 generated_i = row.get("generated")
 if generated_i:
-    core_up = row.get("hybrid_core_up")
-    req_mat_mib = row.get("hybrid_req_mat_mib")
-    req_service = row.get("hybrid_req_service")
+    core_up = row.get("decode_hybrid_core_upload_mib", row.get("hybrid_core_up"))
+    req_mat_mib = row.get("decode_hybrid_req_mat_mib", row.get("hybrid_req_mat_mib"))
+    req_service = row.get("decode_hybrid_req_service_ms", row.get("hybrid_req_service"))
+    factor_up = row.get("decode_hybrid_factor_upload_mib", row.get("hybrid_factor_up"))
+    input_up = row.get("decode_hybrid_input_upload_mib", row.get("hybrid_input_up"))
     if isinstance(core_up, (int, float)):
         row["uploaded_expert_mib_per_token_metric"] = float(core_up) / generated_i
     if isinstance(req_mat_mib, (int, float)):
         row["required_miss_mib_per_token_metric"] = float(req_mat_mib) / generated_i
     if isinstance(req_service, (int, float)):
         row["required_miss_service_ms_per_token_metric"] = float(req_service) / generated_i
-req_hit = row.get("hybrid_req_hit")
-req_miss = row.get("hybrid_req_miss")
+    if isinstance(factor_up, (int, float)):
+        row["factor_up_mib_per_token_metric"] = float(factor_up) / generated_i
+    if isinstance(input_up, (int, float)):
+        row["input_up_mib_per_token_metric"] = float(input_up) / generated_i
+req_hit = row.get("decode_hybrid_req_hit", row.get("hybrid_req_hit"))
+req_miss = row.get("decode_hybrid_req_miss", row.get("hybrid_req_miss"))
 if isinstance(req_hit, (int, float)) and isinstance(req_miss, (int, float)) and req_hit + req_miss > 0:
     row["metric_required_hit_rate"] = float(req_hit) / (float(req_hit) + float(req_miss))
 pre_hit = row.get("hybrid_pre_hit")

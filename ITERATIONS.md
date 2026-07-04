@@ -3831,3 +3831,193 @@ Agent diagnosis: Once the phone runner md5 matched the rebuilt host runner from 
 My diagnosis: Binary, env, and log capture are now proven for V1.1 trace plumbing. This rules out event-trace schema failure for the prior zero-event run. Data events appearing means there is no active-path instrumentation blocker for the sampled path. The remaining state-relation limitation is sample coverage: aggregate counters report `hybrid_res_dup_upload=4642` and `hybrid_res_evict=21360`, while the 200-event data sample did not include repeat_upload or evict events, so duplicate-upload causality still needs a larger or targeted trace sample before optimization.
 Needed expert knowledge: Need a sampling strategy or event-limit setting that captures repeat_upload and evict/invalidation events when the next diagnostic asks for duplicate-upload causality. No runtime-policy edit is justified by this trace-plumbing run alone.
 Patch / commit: No optimization patch and no instrumentation change. Diagnostic artifact written at results/runs/s6_harness_v1_1_trace_plumbing_recheck_fasttemp_p16_d16/state_relation.event_level.json.
+
+## s6_harness_v1_1_trace_plumbing_smoke_fasttemp_p16_d16
+
+Iteration ID: s6_harness_v1_1_trace_plumbing_smoke_fasttemp_p16_d16
+Stage: s6_harness_v1_1_trace_plumbing_smoke
+Agent prompt setting: S6 Harness V1.1 Trace Plumbing Smoke; diagnostic-only binary provenance and trace plumbing validation.
+Runtime branch/commit: exp/s6-residency-event-trace-v1 / f4a73850
+Binary provenance gate executed: true
+Host runner: /home/liuxu/projects/mllm/build-android-arm64-v8a-qnn/bin/mllm-qwen2-moe-td-qnn-aot-runner
+Host runner md5: 0827e113dd57e1c0f34b06d12e011f91
+Phone runner: /data/local/tmp/qwen2_moe_td_w8a16_clean_20260527/mllm-qwen2-moe-td-qnn-aot-runner
+Phone runner md5: 0827e113dd57e1c0f34b06d12e011f91
+Host md5 == phone md5: true
+Phone runner stat: size=37248568 mode=777 type=regular file mtime=2026-07-04 17:24:06 +0800
+Benchmark command: python3 harness/benchmark_adapter.py run --label s6_harness_v1_1_trace_plumbing_smoke_fasttemp_p16_d16 --runtime /home/liuxu/projects/mllm --stage s6_harness_v1_1_trace_plumbing_smoke --profile day_smoke_p16_d16 --trace-residency --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENTS=1 --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENT_LIMIT=200
+Extraction command: python3 harness/extract_state_trace.py --log results/runs/s6_harness_v1_1_trace_plumbing_smoke_fasttemp_p16_d16/logs/qwen2_td_qnn.log --out-jsonl results/runs/s6_harness_v1_1_trace_plumbing_smoke_fasttemp_p16_d16/state_trace.jsonl --out-summary results/runs/s6_harness_v1_1_trace_plumbing_smoke_fasttemp_p16_d16/state_trace_summary.json
+Correctness result: adapter_check valid=true; correct=true; generated_tokens=16.0; RET=0.
+Metrics: decode_tok_s=0.27; mib_per_token=4673.9419375; required_miss_count=22032.0; upload_bytes=78415733456.896; eviction_churn=21360.0.
+State trace summary: results/runs/s6_harness_v1_1_trace_plumbing_smoke_fasttemp_p16_d16/state_trace_summary.json
+Trace extraction: events=202; trace_config_present=true; data_events_present=true.
+Event counts: {"trace_config": 2, "miss": 32, "upload": 32, "record": 80, "later_access": 56}
+Final classification: event_level_trace_plumbing_working. Host/phone binary provenance matched before trace interpretation, trace_config appeared, and data events appeared, so event-level trace plumbing is working. No optimization, instrumentation, p32/d32, or policy patch was run.
+
+## s6_harness_v1_event_localization_fasttemp_p16_d16_sandbox_invalid
+
+Iteration ID: s6_harness_v1_event_localization_fasttemp_p16_d16_sandbox_invalid
+Stage: s6_harness_v1_event_localization
+Agent prompt setting: references/prompts/s6_harness_v1_event_localization.md
+Baseline bottleneck decomposition: formal event-level localization test; benchmark launch blocked by sandboxed ADB daemon
+Targeted bottleneck: transfer/residency state-relation localization, diagnostic-only
+Expected diagnostic movement: host/phone md5 gate, trace_config, data events, and event-level profiling facts
+Agent hypothesis: event-level trace can expose upload/record/later-access/evict timelines that aggregate counters hide
+Chosen optimization direction: diagnostic-only formal V1 event localization; no runtime optimization edit
+Files inspected: SKILL.md, benchmark_instructions.md, control_surface_localization.md, metrics_schema.md, benchmark_adapter.py, extract_state_trace.py, state_relation_trace_schema.md
+Files modified: references/prompts/s6_harness_v1_event_localization.md, ITERATIONS.md
+Change summary: Added formal event-level localization prompt; first adapter launch produced invalid metrics because sandboxed ADB could not start daemon
+Benchmark command: python3 harness/benchmark_adapter.py run --label s6_harness_v1_event_localization_fasttemp_p16_d16 --runtime /home/liuxu/projects/mllm --stage s6_harness_v1_event_localization --profile day_smoke_p16_d16 --trace-residency --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENTS=1 --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENT_LIMIT=2000
+Compile result: True
+Correctness result: None
+Metrics:
+  decode_tok_s: None
+  mib_per_token: None
+  required_miss_count: None
+  upload_bytes: None
+  prewarm_hit_rate: None
+  eviction_churn: None
+  required_miss_wait_ms_per_token: None
+  decode_req_page_touch_ms: None
+  decode_req_mat_enqueue_ms: None
+  decode_req_mat_finish_ms: None
+  decode_req_service_ms: None
+  decode_req_mat_writes: None
+  decode_req_page_touch_mib: None
+  decode_core_upload_mib: None
+  decode_req_miss: None
+  decode_req_hit: None
+  decode_evict: None
+  cache_hit_rate: None
+  peak_temp_skin_c_decode: None
+Result: invalid: sandboxed ADB daemon could not start; escalated rerun request failed with approval 502
+Agent diagnosis: Binary provenance gate passed before launch: runtime branch exp/s6-residency-event-trace-v1 at f4a73850; host/phone runner md5 matched 0827e113dd57e1c0f34b06d12e011f91. Benchmark itself did not run.
+My diagnosis: This is not a harness localization result; it is an execution-permission failure. Rerun exact adapter command with device/ADB access, then extract trace and write an event-level profiling report.
+Needed expert knowledge: None yet; need successful traced run before interpreting state relation
+Patch / commit: prompt added locally; no runtime patch
+
+## s6_harness_v1_event_localization_fasttemp_p16_d16
+
+Iteration ID: s6_harness_v1_event_localization_fasttemp_p16_d16
+Stage: s6_harness_v1_event_localization
+Agent prompt setting: references/prompts/s6_harness_v1_event_localization.md
+Baseline bottleneck decomposition: transfer/residency repeated physical payload movement: high mib_per_token, req_miss, evict, req_service, res_upload, res_dup_upload
+Targeted bottleneck: event-level state-relation localization for packed required decode payload uploads
+Expected diagnostic movement: trace_config plus data events; logical_key/physical_key/coverage/later_access evidence sufficient to refine the bounded task
+Agent hypothesis: sampled event-level trace can expose logical-key, physical-key, coverage, later-access, and eviction evidence for the agent to interpret after code inspection
+Chosen optimization direction: diagnostic-only formal V1 event localization; no runtime optimization patch
+Files inspected: metrics.json, summary.jsonl, qwen2_td_qnn.log, state_trace.jsonl, state_trace_summary.json, bounded_task.json, parse_metrics.py, control_surface_localization.md, state_relation_trace_schema.md
+Files modified: references/prompts/s6_harness_v1_event_localization.md, scripts/parse_metrics.py, harness/harness_ledger.md, ITERATIONS.md
+Change summary: Ran valid traced p16/d16 formal localization; extracted 2002 events; fixed parser mapping for hybrid_* fields; wrote state_profile.event_level.json
+Benchmark command: python3 harness/benchmark_adapter.py run --label s6_harness_v1_event_localization_fasttemp_p16_d16 --runtime /home/liuxu/projects/mllm --stage s6_harness_v1_event_localization --profile day_smoke_p16_d16 --trace-residency --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENTS=1 --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENT_LIMIT=2000
+Compile result: True
+Correctness result: True
+Metrics:
+  decode_tok_s: 0.32
+  mib_per_token: 4673.9419375
+  required_miss_count: 22032.0
+  upload_bytes: 78415733456.896
+  prewarm_hit_rate: None
+  eviction_churn: 21360.0
+  required_miss_wait_ms_per_token: 4697.9574375
+  decode_req_page_touch_ms: 61921.422
+  decode_req_mat_enqueue_ms: 12939.582
+  decode_req_mat_finish_ms: 56.237
+  decode_req_service_ms: 75167.319
+  decode_req_mat_writes: 7344.0
+  decode_req_page_touch_mib: 74783.071
+  decode_core_upload_mib: 74783.071
+  decode_req_miss: 22032.0
+  decode_req_hit: 10224.0
+  decode_evict: 21360.0
+  cache_hit_rate: 0.3169642857142857
+  peak_temp_skin_c_decode: None
+Result: diagnostic_success: event-level profiling improved observability over aggregate counters
+Agent diagnosis: Binary provenance passed: host/phone runner md5 matched 0827e113dd57e1c0f34b06d12e011f91. Correctness passed. Events=2002 with upload=265, record=795, later_access=544, evict=123. Relation counts show later_miss_before_known_eviction=530 and later_hit_after_upload=14.
+My diagnosis: V1 event trace is meaningful: it reveals packed upload coverage of gate/up/down and later sibling logical misses, which aggregate metrics alone could not show. But eviction events lack logical/physical identity, so the harness still cannot prove full physical effect lifetime or explain all res_dup_upload from event facts alone.
+Needed expert knowledge: Next harness step: attach physical_key/slot_id to evict and later_access, and emit stable repeat_upload identity not solely pointer-based.
+Patch / commit: diagnostic artifacts only; no runtime optimization patch
+
+## s6_harness_v1_2_keyed_lifetime_sandbox_invalid
+
+Iteration ID: s6_harness_v1_2_keyed_lifetime_sandbox_invalid
+Stage: s6_harness_v1_2_keyed_lifetime
+Agent prompt setting: references/prompts/s6_harness_v1_2_keyed_lifetime_trace.md
+Baseline bottleneck decomposition: V1 showed covered sibling later misses but insufficient physical lifetime evidence; V1.2 adds keyed lifetime trace to expose whether later miss happens before or after physical invalidation.
+Targeted bottleneck: diagnostic-only keyed lifetime state relation for required decode packed payloads
+Expected diagnostic movement: trace events should include stable_physical_key, slot_id, was_covered_by_previous_upload, duplicate_by_stable_key, and keyed evict/later_access evidence
+Agent hypothesis: keyed lifetime trace can expose before/after-eviction timelines for res_dup_upload/high later sibling miss without forcing a semantic diagnosis
+Chosen optimization direction: diagnostic-only instrumentation and formal trace run; no runtime optimization policy edit
+Files inspected: aot_run.cpp trace emission, ProjectionCache CacheEntry, ensureExpertsCachedBatchGpuV3, ensureExpertsPackedCachedBatchGpuV3, extract_state_trace.py, state_relation_trace_schema.md
+Files modified: runtime aot_run.cpp diagnostic trace fields; harness extract_state_trace.py; state_relation_trace_schema.md; s6_harness_v1_2_keyed_lifetime_trace.md; ITERATIONS.md
+Change summary: Added V1.2 keyed lifetime trace fields and extractor relation counts; build passed; deployed runner md5 matched; benchmark launch blocked by sandboxed ADB daemon
+Benchmark command: python3 harness/benchmark_adapter.py run --label s6_harness_v1_2_keyed_lifetime_fasttemp_p16_d16 --runtime /home/liuxu/projects/mllm --stage s6_harness_v1_2_keyed_lifetime --profile day_smoke_p16_d16 --trace-residency --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENTS=1 --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENT_LIMIT=4000
+Compile result: True
+Correctness result: None
+Metrics:
+  decode_tok_s: None
+  mib_per_token: None
+  required_miss_count: None
+  upload_bytes: None
+  prewarm_hit_rate: None
+  eviction_churn: None
+  required_miss_wait_ms_per_token: None
+  decode_req_page_touch_ms: None
+  decode_req_mat_enqueue_ms: None
+  decode_req_mat_finish_ms: None
+  decode_req_service_ms: None
+  decode_req_mat_writes: None
+  decode_req_page_touch_mib: None
+  decode_core_upload_mib: None
+  decode_req_miss: None
+  decode_req_hit: None
+  decode_evict: None
+  cache_hit_rate: None
+  peak_temp_skin_c_decode: None
+Result: invalid: sandboxed ADB daemon could not start; escalated rerun request failed with approval 502
+Agent diagnosis: Runtime diagnostic build passed and was deployed. Host/phone runner md5 matched 9b3e57b822c6a6f507fd268837ab7d58; phone runner size 37525080 mode -rwxrwxrwx. Benchmark itself did not run.
+My diagnosis: This is an execution-permission failure, not a V1.2 diagnostic result. Run the exact adapter command with device/ADB access, then extract trace and write a keyed-lifetime profiling report.
+Needed expert knowledge: None until successful trace; after run inspect later_miss_before_keyed_evict vs later_miss_after_keyed_evict and repeat_upload_by_stable_key as profiling evidence.
+Patch / commit: diagnostic source changes are local; no optimization patch
+
+## s6_harness_v1_2_keyed_lifetime_fasttemp_p16_d16
+
+Iteration ID: s6_harness_v1_2_keyed_lifetime_fasttemp_p16_d16
+Stage: s6_harness_v1_2_keyed_lifetime
+Agent prompt setting: references/prompts/s6_harness_v1_2_keyed_lifetime_trace.md
+Baseline bottleneck decomposition: transfer/residency repeated packed payload work with high req_miss, evict, res_upload, res_dup_upload; V1 lacked keyed physical lifetime evidence
+Targeted bottleneck: keyed lifetime relation between packed physical upload, covered sibling logical accesses, eviction, and repeated upload
+Expected diagnostic movement: trace events include stable_physical_key, slot_id, was_covered_by_previous_upload, keyed evict, and derived relation counts
+Agent hypothesis: keyed lifetime trace can expose whether later covered sibling misses happen before or after keyed eviction; the agent should interpret these timelines after code inspection
+Chosen optimization direction: diagnostic-only keyed lifetime trace; no runtime optimization patch
+Files inspected: aot_run.cpp ProjectionCache/CacheEntry/ensureExpertsCachedBatchGpuV3/trace events, extract_state_trace.py, state_trace_summary.json, state_profile.keyed_lifetime.json
+Files modified: aot_run.cpp diagnostic trace fields, harness/extract_state_trace.py, references/state_relation_trace_schema.md, references/prompts/s6_harness_v1_2_keyed_lifetime_trace.md, harness/harness_ledger.md, ITERATIONS.md
+Change summary: Added keyed lifetime instrumentation and extractor-derived relation counts; built/deployed md5-matched runner; ran valid traced p16/d16; wrote keyed-lifetime profiling report
+Benchmark command: python3 harness/benchmark_adapter.py run --label s6_harness_v1_2_keyed_lifetime_fasttemp_p16_d16 --runtime /home/liuxu/projects/mllm --stage s6_harness_v1_2_keyed_lifetime --profile day_smoke_p16_d16 --trace-residency --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENTS=1 --extra-env AKO_QWEN2_RESIDENCY_TRACE_EVENT_LIMIT=4000
+Compile result: True
+Correctness result: True
+Metrics:
+  decode_tok_s: 0.32
+  mib_per_token: 4673.9419375
+  required_miss_count: 22032.0
+  upload_bytes: 78415733456.896
+  prewarm_hit_rate: None
+  eviction_churn: 21360.0
+  required_miss_wait_ms_per_token: 5246.3021875
+  decode_req_page_touch_ms: 65927.886
+  decode_req_mat_enqueue_ms: 17333.791
+  decode_req_mat_finish_ms: 68.202
+  decode_req_service_ms: 83940.835
+  decode_req_mat_writes: 7344.0
+  decode_req_page_touch_mib: 74783.071
+  decode_core_upload_mib: 74783.071
+  decode_req_miss: 22032.0
+  decode_req_hit: 10224.0
+  decode_evict: 21360.0
+  cache_hit_rate: 0.3169642857142857
+  peak_temp_skin_c_decode: None
+Result: diagnostic_success: keyed lifetime trace exposes before/after-eviction timelines and stable-key repeat-upload evidence
+Agent diagnosis: Correctness passed; generated 16. Events=4002, upload=454, record=1348, later_access=1008, evict=678. Derived counts: keyed_evict=230, later_miss_before_keyed_evict=886, later_miss_after_keyed_evict=10, repeat_upload_by_stable_key=7.
+My diagnosis: V1.2 achieved the intended harness improvement as profiling. It turns V1's vague covered sibling later misses into keyed-lifetime facts: many sampled covered sibling misses happen before keyed eviction, while keyed eviction and stable repeat-upload events also exist. The harness should stop at these facts and leave causal interpretation to the agent after code inspection.
+Needed expert knowledge: Next harness step is to make keyed lifetime profiling a first-class report generator and let future agents form their own causal hypothesis, with physical transfer counters as acceptance guards for any optimization.
+Patch / commit: diagnostic artifacts only; no optimization patch accepted
