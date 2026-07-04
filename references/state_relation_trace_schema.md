@@ -30,7 +30,7 @@ Required fields:
 
 ```json
 {
-  "event": "probe|hit|miss|upload|record|evict|later_access|repeat_upload",
+  "event": "trace_config|probe|hit|miss|upload|record|evict|later_access|repeat_upload",
   "phase": "prefill|required_decode|prewarm_decode|unknown",
   "layer": 0,
   "expert": 0,
@@ -46,6 +46,9 @@ Optional fields:
 
 ```json
 {
+  "enabled": true,
+  "events_enabled": true,
+  "event_limit": 200,
   "covered_logical_keys": ["L0:E0:gate", "L0:E0:up", "L0:E0:down"],
   "invalidated_by": "eviction|overwrite|phase_reset|unknown",
   "later_access": "hit|miss|repeated_upload|unknown",
@@ -60,6 +63,7 @@ Optional fields:
 
 The trace should make these questions answerable from examples:
 
+- Did the runtime binary/env/log path actually enable event tracing?
 - Which logical request triggered the physical action?
 - Which physical key was uploaded, recorded, reused, repeated, or evicted?
 - Which later logical keys should have been covered by one physical action?
@@ -80,6 +84,10 @@ The summary groups events by physical key and logical key so a future agent can
 inspect examples instead of scanning raw logs.
 
 ## Acceptance Discipline
+
+If `trace_config` is missing, debug build/deploy/env/log capture before drawing
+state-relation conclusions. If `trace_config` is present but no data events
+appear, debug active-path instrumentation or event-emission guards.
 
 Event traces are diagnostic evidence, not speedups. A runtime patch still needs
 the normal classifier verdict and benchmark guardrails before acceptance.

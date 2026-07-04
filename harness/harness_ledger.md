@@ -57,3 +57,23 @@ Add `references/state_relation_trace_schema.md` and
 Status:
 Accepted as harness v1 diagnostic design. This is not an optimization; it is a
 more precise observation layer for deciding which control surface is real.
+
+## 2026-07-04 - Add Trace Plumbing Sentinel
+
+Finding:
+The first V1 event-trace run requested trace env vars and passed correctness,
+but `state_trace_summary.json` contained zero events. That left two very
+different possibilities indistinguishable: build/deploy/env/log capture was not
+proven, or the active runtime path never hit event-emission sites.
+
+Harness change:
+Require a `trace_config` sentinel event before data events are interpreted. Add
+the V1.1 trace-plumbing prompt so zero-event diagnostics split into:
+
+- no sentinel: binary/env/log path not proven;
+- sentinel only: active-path instrumentation gap;
+- sentinel plus data events: event-level state relation can be analyzed.
+
+Status:
+Accepted as observability plumbing. This is a diagnostic reliability change, not
+a runtime optimization.

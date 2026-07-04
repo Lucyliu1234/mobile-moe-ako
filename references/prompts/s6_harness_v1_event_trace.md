@@ -85,6 +85,23 @@ It must answer from `state_trace_summary.json`:
 If the event trace has zero events, classify this as a diagnostic harness
 failure and stop without optimization.
 
+If the trace contains only `trace_config` and no data events such as `miss`,
+`upload`, `record`, `evict`, `later_access`, or `repeat_upload`, classify this
+as an active-path instrumentation failure and stop without optimization.
+
+Interpretation:
+
+```text
+no trace_config:
+  binary/env/log capture is not proven
+
+trace_config present but no data events:
+  env/log plumbing works, but active-path event emission or guards are missing
+
+trace_config and data events present:
+  proceed to event-level state relation interpretation
+```
+
 ## Stop Rule
 
 Do not run optimization patches in this prompt unless explicitly asked later.

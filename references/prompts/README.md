@@ -43,3 +43,7 @@ as qualitative controls and tests whether `harness/benchmark_adapter.py`,
 tests whether sampled `[TD-RES-TRACE]` event logs and
 `harness/extract_state_trace.py` can upgrade aggregate state relations into
 per-key logical-request / physical-action evidence before optimization.
+
+`s6_harness_v1_1_trace_plumbing.md` is a diagnostic-only follow-up for empty
+event traces. It expects a runtime `trace_config` sentinel and classifies the
+failure as binary/env/log plumbing vs active-path event instrumentation.
