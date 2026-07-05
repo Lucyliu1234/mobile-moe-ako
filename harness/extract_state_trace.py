@@ -74,12 +74,25 @@ def summarize(events: list[dict[str, Any]], max_examples: int) -> dict[str, Any]
 
     derived_counts: Counter[str] = Counter()
     derived_examples: list[dict[str, Any]] = []
+    consistency_counts: Counter[str] = Counter()
+    consistency_examples: list[dict[str, Any]] = []
     evicted_stable: set[str] = set()
     evicted_physical: set[str] = set()
     for event in events:
         name = event_key(event, "event")
         physical_key = event_key(event, "physical_key")
         stable_key = event_key(event, "stable_physical_key")
+        covered_keys = event.get("covered_logical_keys")
+        covered_count = len(covered_keys) if isinstance(covered_keys, list) else 0
+        if covered_count:
+            consistency_counts["events_with_coverage_set"] += 1
+            consistency_counts["covered_logical_key_mentions"] += covered_count
+        if name in {"upload", "repeat_upload"}:
+            consistency_counts["physical_upload_events"] += 1
+            if covered_count:
+                consistency_counts["physical_uploads_with_coverage_set"] += 1
+        if name == "record":
+            consistency_counts["logical_record_events"] += 1
         if name == "evict":
             if stable_key != "unknown":
                 evicted_stable.add(stable_key)
@@ -96,7 +109,11 @@ def summarize(events: list[dict[str, Any]], max_examples: int) -> dict[str, Any]
             continue
         if name == "later_access" and event.get("later_access") == "miss":
             was_covered = bool_value(event, "was_covered_by_previous_upload")
+            consistency_counts["later_access_events"] += 1
+            consistency_counts["later_access_miss"] += 1
             if was_covered:
+                consistency_counts["covered_later_access_events"] += 1
+                consistency_counts["covered_later_miss"] += 1
                 if stable_key != "unknown" and stable_key in evicted_stable:
                     relation = "later_miss_after_keyed_evict"
                 elif physical_key != "unknown" and physical_key in evicted_physical:
@@ -104,22 +121,44 @@ def summarize(events: list[dict[str, Any]], max_examples: int) -> dict[str, Any]
                 else:
                     relation = "later_miss_before_keyed_evict"
                 derived_counts[relation] += 1
+                consistency_counts[f"covered_{relation}"] += 1
                 if len(derived_examples) < max_examples:
-                    derived_examples.append(
-                        {
-                            "relation": relation,
-                            "logical_key": event_key(event, "logical_key"),
-                            "physical_key": physical_key,
-                            "stable_physical_key": stable_key,
-                            "slot_id": event.get("slot_id"),
-                            "later_access": event.get("later_access"),
-                            "covered_logical_keys": event.get(
-                                "covered_logical_keys", []
-                            ),
-                        }
-                    )
+                    example = {
+                        "relation": relation,
+                        "logical_key": event_key(event, "logical_key"),
+                        "physical_key": physical_key,
+                        "stable_physical_key": stable_key,
+                        "slot_id": event.get("slot_id"),
+                        "later_access": event.get("later_access"),
+                        "covered_logical_keys": event.get(
+                            "covered_logical_keys", []
+                        ),
+                    }
+                    derived_examples.append(example)
+                    consistency_examples.append(example)
             else:
                 derived_counts["later_miss_without_known_coverage"] += 1
+                consistency_counts["later_miss_without_known_coverage"] += 1
+        elif name == "later_access":
+            consistency_counts["later_access_events"] += 1
+            later = event_key(event, "later_access")
+            consistency_counts[f"later_access_{later}"] += 1
+            if bool_value(event, "was_covered_by_previous_upload"):
+                consistency_counts["covered_later_access_events"] += 1
+                consistency_counts[f"covered_later_{later}"] += 1
+
+    uploads = consistency_counts.get("physical_upload_events", 0)
+    records = consistency_counts.get("logical_record_events", 0)
+    covered_later = consistency_counts.get("covered_later_access_events", 0)
+    covered_later_miss = consistency_counts.get("covered_later_miss", 0)
+    consistency_ratios = {
+        "logical_records_per_physical_upload": (
+            records / uploads if uploads else None
+        ),
+        "covered_later_miss_rate": (
+            covered_later_miss / covered_later if covered_later else None
+        ),
+    }
 
     examples: list[dict[str, Any]] = []
     for physical_key, group in by_physical.items():
@@ -184,6 +223,11 @@ def summarize(events: list[dict[str, Any]], max_examples: int) -> dict[str, Any]
         "top_logical_keys": logical_counts.most_common(max_examples),
         "top_physical_keys": physical_counts.most_common(max_examples),
         "top_stable_physical_keys": stable_physical_counts.most_common(max_examples),
+        "physical_logical_consistency": {
+            "counts": dict(sorted(consistency_counts.items())),
+            "ratios": consistency_ratios,
+            "examples": consistency_examples[:max_examples],
+        },
         "examples": examples[:max_examples],
         "derived_examples": derived_examples,
     }

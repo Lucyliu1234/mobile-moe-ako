@@ -115,6 +115,43 @@ repeat_upload_by_stable_key
 later_miss_without_known_coverage
 ```
 
+It should also expose a facts-only `physical_logical_consistency` section in
+the trace summary and profile report. This section is meant to make physical
+coverage versus logical cache state visible without assigning a fixed cause
+label. Useful fields include:
+
+```json
+{
+  "counts": {
+    "physical_upload_events": 48,
+    "physical_uploads_with_coverage_set": 48,
+    "logical_record_events": 124,
+    "covered_later_access_events": 80,
+    "covered_later_miss": 80,
+    "covered_later_miss_before_keyed_evict": 80
+  },
+  "ratios": {
+    "logical_records_per_physical_upload": 2.58,
+    "covered_later_miss_rate": 1.0
+  },
+  "examples": [
+    {
+      "logical_key": "L0:E15:up",
+      "physical_key": "L0:E15:ptr0x...",
+      "stable_physical_key": "L0:E15:path:off...",
+      "covered_logical_keys": ["L0:E15:gate", "L0:E15:up", "L0:E15:down"],
+      "later_access": "miss",
+      "relation": "later_miss_before_keyed_evict"
+    }
+  ]
+}
+```
+
+This section should not say that the cause is logical missing state, physical
+key mismatch, eviction churn, or any other category. It only reports whether a
+later logical access was covered by an earlier physical action, whether that
+later access hit or missed, and whether a keyed invalidation was observed first.
+
 ## Harness Output
 
 `harness/extract_state_trace.py` reads the runtime log and writes:

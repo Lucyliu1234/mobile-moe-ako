@@ -296,3 +296,88 @@ projection breakdowns under `adapter_specific_appendix`.
 Status:
 Accepted. The harness now treats layer as adapter metadata, while the primary
 profile remains generic enough for other runtime systems.
+
+## 2026-07-05 - Add Minimal Intervention Audit
+
+Finding:
+Facts-only profiling can expose a state/resource consistency problem, but the
+agent may still choose a heavier patch surface first, such as changing dispatch
+or execution ownership, when a smaller metadata/state-accounting intervention
+would test the same causal hypothesis with fewer confounders.
+
+Harness change:
+Extend `boundary_form.md` with a required Minimal Intervention Audit. Before
+patching, the agent must list plausible control surfaces:
+
+- physical action;
+- dispatch/execution owner;
+- metadata/state accounting;
+- lifetime/invalidation.
+
+The agent must then choose the smallest surface that can test the hypothesis
+while preserving semantics and the existing execution path when possible. If it
+chooses a heavier surface, it must explain why lighter surfaces cannot test the
+hypothesis.
+
+Status:
+Accepted as a boundary-form discipline rule. This does not encode a
+MobileMoE-specific answer; it makes the patch choice more auditable after the
+agent has already chosen a boundary from profile facts.
+
+## 2026-07-05 - Add Non-Residency Runtime Timeline Profiles
+
+Finding:
+Long-horizon attempts that deliberately explored boundaries outside
+residency/cache, such as QNN context scheduling, async preload/activation,
+registered-memory cleanup, and lm_head handling, were hard to interpret because
+the harness exposed those costs mostly as scattered log lines or coarse totals.
+Residency had event-level facts, while these other runtime boundaries did not.
+
+Harness change:
+Extend `harness/detail_profile.py` to parse existing logs into facts-only
+sections:
+
+- `qnn_context_timeline`: preload retrieve enter/done, loadContext begin,
+  async-satisfied loads, activation stages, wait, cleanup, context-free,
+  graph-map rebuild, set-pointer, total activation time, per-context and slot
+  summaries.
+- `lm_head_timeline`: external lm_head calls, failures, upload/kernel/readback
+  time, total time, and transfer byte summaries.
+- `async_overlap_profile`: preload enter/done, load satisfied by async preload,
+  wait-joinable counts, wait-preload time, activation total time, and contexts
+  whose preload completed without a matching async-satisfied load.
+
+`harness/profile_report.py` now promotes these sections into
+`mobile_profile.json`, and the boundary form lists them as available profile
+sections when present.
+
+Status:
+Accepted as profiling-quality v1.5. This adds measured facts for alternative
+runtime boundaries without adding new diagnosis categories or telling the agent
+which boundary to optimize.
+
+## 2026-07-06 - Add Compute-Vs-Bandwidth Triage
+
+Finding:
+Expanded profiling can expose local compute/operator hotspots, such as an
+external score kernel, but local kernel speedups do not necessarily move the
+MobileMoE end-to-end primary metric. Treating every hotspot as a whole-system
+runtime patch opportunity confuses two different optimization regimes:
+operator-local compute optimization and whole-system bandwidth/runtime
+optimization.
+
+Harness change:
+Update `SKILL.md` and `boundary_form.md` so every run first performs only a
+coarse compute-vs-bandwidth triage:
+
+- `compute_operator_kernel`: switch to the original AKO4ALL workflow in
+  `/home/liuxu/projects/AKO4ALL`, then validate accepted local wins end-to-end
+  with the MobileMoE adapter.
+- `bandwidth_system`: stay in the MobileMoE profiler-first harness and let the
+  agent choose the concrete runtime boundary from profile facts and code
+  inspection.
+
+Status:
+Accepted as routing discipline. The harness now distinguishes compute-bound
+operator optimization from whole-system bandwidth/runtime exploration without
+encoding subcategories or a specific patch answer.

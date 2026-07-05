@@ -237,6 +237,16 @@ def build_report(
                     ],
                 ),
             },
+            "physical_logical_consistency": {
+                "available": bool(trace_summary.get("physical_logical_consistency")),
+                **(
+                    trace_summary.get("physical_logical_consistency")
+                    if isinstance(
+                        trace_summary.get("physical_logical_consistency"), dict
+                    )
+                    else {}
+                ),
+            },
             "runtime_event_profile": {
                 "available": detail_present,
                 **pick(
@@ -244,6 +254,30 @@ def build_report(
                     [
                         "runtime_event_profile",
                     ],
+                ),
+            },
+            "qnn_context_timeline": {
+                "available": bool(detail_profile.get("qnn_context_timeline")),
+                **(
+                    detail_profile.get("qnn_context_timeline")
+                    if isinstance(detail_profile.get("qnn_context_timeline"), dict)
+                    else {}
+                ),
+            },
+            "lm_head_timeline": {
+                "available": bool(detail_profile.get("lm_head_timeline")),
+                **(
+                    detail_profile.get("lm_head_timeline")
+                    if isinstance(detail_profile.get("lm_head_timeline"), dict)
+                    else {}
+                ),
+            },
+            "async_overlap_profile": {
+                "available": bool(detail_profile.get("async_overlap_profile")),
+                **(
+                    detail_profile.get("async_overlap_profile")
+                    if isinstance(detail_profile.get("async_overlap_profile"), dict)
+                    else {}
                 ),
             },
             "adapter_specific_appendix": detail_profile.get(
@@ -280,6 +314,21 @@ def build_report(
             "page_residency": missing(metrics, page_residency_metrics),
             "state_trace": [] if trace_present else ["state_trace_summary"],
             "runtime_event_profile": [] if detail_present else ["detail_profile"],
+            "qnn_context_timeline": (
+                []
+                if detail_profile.get("qnn_context_timeline", {}).get("available")
+                else ["qnn_context_log"]
+            ),
+            "lm_head_timeline": (
+                []
+                if detail_profile.get("lm_head_timeline", {}).get("available")
+                else ["lm_head_summary"]
+            ),
+            "async_overlap_profile": (
+                []
+                if detail_profile.get("async_overlap_profile", {}).get("available")
+                else ["qnn_context_log"]
+            ),
         },
     }
 

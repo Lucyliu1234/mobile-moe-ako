@@ -87,9 +87,11 @@ LOCAL_STDOUT="${OUT_DIR}/logs/qwen2_td_qnn.adb_stdout.log"
 SUMMARY_JSONL="${OUT_DIR}/summary.jsonl"
 REMOTE_SCRIPT_LOCAL="${OUT_DIR}/logs/qwen2_td_qnn_remote.sh"
 REMOTE_SCRIPT_NAME="mobile_moe_ako_qwen2_td_qnn.sh"
-PROMPT_ESCAPED="${PROMPT_TEXT//\'/\'\\\'\'}"
+PROMPT_SENT="${PROMPT_TEXT//$'\r'/ }"
+PROMPT_SENT="${PROMPT_SENT//$'\n'/ }"
+PROMPT_ESCAPED="${PROMPT_SENT//\'/\'\\\'\'}"
 
-printf '%s\n' "${PROMPT_TEXT}" > "${OUT_DIR}/prompts/qwen2_td_qnn.txt"
+printf '%s\n' "${PROMPT_SENT}" > "${OUT_DIR}/prompts/qwen2_td_qnn.txt"
 
 cat > "${REMOTE_SCRIPT_LOCAL}" <<EOF
 #!/system/bin/sh
@@ -211,12 +213,15 @@ HYBRID_COLD_RE = re.compile(r"\[TD-RUN\]\[hybrid-cold\]\s*(.*)")
 ANSI_RE = re.compile(r"\x1b\[[0-9;:]*m")
 
 def num(pattern):
-    m = re.search(pattern, text, re.I)
-    if not m:
+    matches = re.findall(pattern, text, re.I)
+    if not matches:
         return None
     try:
-        return float(m.group(1))
-    except ValueError:
+        value = matches[-1]
+        if isinstance(value, tuple):
+            value = value[0]
+        return float(value)
+    except (TypeError, ValueError):
         return None
 
 def parse_value(raw):
@@ -251,10 +256,15 @@ ret = int(ret_matches[-1]) if ret_matches else None
 generated = num(r"Generated tokens\s*:\s*(\d+)")
 decode_s = None
 decode_tok_s = None
-m = re.search(r"Decode(?:\s+time)?\s*:\s*([-+0-9.]+)\s*(?:us|µs|μs)\s*\(\s*([-+0-9.]+)\s+(?:tok/s|tokens/s)\s*\)", text, re.I)
-if m:
-    decode_s = float(m.group(1)) / 1_000_000.0
-    decode_tok_s = float(m.group(2))
+decode_matches = re.findall(
+    r"Decode(?:\s+time)?\s*:\s*([-+0-9.]+)\s*(?:us|µs|μs)\s*\(\s*([-+0-9.]+)\s+(?:tok/s|tokens/s)\s*\)",
+    text,
+    re.I,
+)
+if decode_matches:
+    decode_us, decode_tps = decode_matches[-1]
+    decode_s = float(decode_us) / 1_000_000.0
+    decode_tok_s = float(decode_tps)
 else:
     avg_ms = num(r"Avg decode time\s*:\s*([-+0-9.]+)\s*(?:ms|milliseconds)")
     if avg_ms and avg_ms > 0:

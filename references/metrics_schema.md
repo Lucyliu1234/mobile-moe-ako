@@ -104,7 +104,19 @@ Stage boundary:
   logical request hotspots, resource lifetime hotspots, reuse/skip
   effectiveness, phase/path breakdown, coverage-size counts, and physical
   resource byte hotspots from `harness/detail_profile.py`
-- other runtime costs: lm_head, shared expert, QNN/GPU timing when exposed
+- QNN context timeline from `harness/detail_profile.py` when logs expose it:
+  preload retrieve enter/done, loadContext begin, async-preload satisfied load,
+  activatePreloadedContext stages, wait-preload time, registered-mem cleanup,
+  context-free time, graph-map rebuild, set-pointer, total activation time, and
+  per-context/slot summaries.
+- lm_head timeline from `harness/detail_profile.py` when logs expose it:
+  external lm_head call count/failures plus upload, kernel, readback, total
+  time, weight upload, input upload, and readback bytes.
+- runtime async overlap profile from `harness/detail_profile.py` when logs
+  expose it: preload enter/done counts, load satisfied by async preload,
+  wait-joinable counts, wait-preload time, activation total time, and contexts
+  whose preloads completed without a matching async-satisfied load.
+- other runtime costs: shared expert and QNN/GPU timing when exposed
 - thermal comparability: `peak_temp_skin_c_decode`, start/end skin or battery temperature when exposed
 
 Missing fields are instrumentation gaps, not zeros. Record missing diagnostics instead of inventing a bottleneck.

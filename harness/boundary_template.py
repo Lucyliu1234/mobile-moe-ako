@@ -33,6 +33,9 @@ def profile_summary(profile_report: dict[str, Any]) -> list[str]:
         "residency_aggregate",
         "state_trace",
         "runtime_event_profile",
+        "qnn_context_timeline",
+        "lm_head_timeline",
+        "async_overlap_profile",
         "adapter_specific_appendix",
         "thermal",
     ]:
@@ -55,12 +58,74 @@ def missing_summary(profile_report: dict[str, Any]) -> list[str]:
     return out
 
 
+def compact_json(data: Any) -> str:
+    return json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True)
+
+
+def adapter_state_facts(profile_report: dict[str, Any]) -> str:
+    sections = profile_report.get("sections")
+    if not isinstance(sections, dict):
+        return "- No state/resource consistency facts were found in the profile."
+
+    facts: list[str] = []
+    consistency = sections.get("physical_logical_consistency")
+    if isinstance(consistency, dict) and consistency.get("available"):
+        slim = {
+            "counts": consistency.get("counts", {}),
+            "ratios": consistency.get("ratios", {}),
+            "examples": consistency.get("examples", [])[:3],
+        }
+        facts.append(
+            "- `physical_logical_consistency`:\n\n"
+            f"```json\n{compact_json(slim)}\n```"
+        )
+
+    state_trace = sections.get("state_trace")
+    if isinstance(state_trace, dict) and state_trace.get("available"):
+        slim = {
+            "event_counts": state_trace.get("event_counts", {}),
+            "later_access_counts": state_trace.get("later_access_counts", {}),
+            "derived_relation_counts": state_trace.get(
+                "derived_relation_counts", {}
+            ),
+            "logical_keys_seen": state_trace.get("logical_keys_seen"),
+            "physical_keys_seen": state_trace.get("physical_keys_seen"),
+            "stable_physical_keys_seen": state_trace.get(
+                "stable_physical_keys_seen"
+            ),
+        }
+        facts.append(
+            "- `state_trace` resource/lifetime summary:\n\n"
+            f"```json\n{compact_json(slim)}\n```"
+        )
+
+    runtime_profile = sections.get("runtime_event_profile")
+    if isinstance(runtime_profile, dict) and runtime_profile.get("available"):
+        data = runtime_profile.get("runtime_event_profile")
+        if isinstance(data, dict):
+            slim = {
+                "coverage_size_counts": data.get("coverage_size_counts", {}),
+                "reuse_skip_effectiveness": data.get(
+                    "reuse_skip_effectiveness", {}
+                ),
+            }
+            facts.append(
+                "- `runtime_event_profile` state/reuse summary:\n\n"
+                f"```json\n{compact_json(slim)}\n```"
+            )
+
+    return "\n\n".join(facts) if facts else (
+        "- No state/resource consistency facts were found in the profile."
+    )
+
+
 def build_markdown(label: str, profile_report: dict[str, Any]) -> str:
     profile_label = profile_report.get("label") or "unknown"
     sections = profile_summary(profile_report)
     missing = missing_summary(profile_report)
     section_text = "\n".join(sections) if sections else "- No profile sections found."
     missing_text = "\n".join(missing) if missing else "- No missing observations reported."
+    state_facts_text = adapter_state_facts(profile_report)
 
     return f"""# Boundary Form: {label}
 
@@ -77,6 +142,28 @@ runtime policy.
 ## Missing Observations
 
 {missing_text}
+
+## Compute-Vs-Bandwidth Triage
+
+TBD
+
+Classify the coarse bottleneck from measured profile facts before choosing a
+patch. This only decides whether to use original AKO4ALL for compute-bound
+operator work or MobileMoE-AKO for bandwidth/system runtime exploration. It
+does not choose the concrete runtime boundary or patch.
+
+Required:
+
+- Selected route:
+  `compute_operator_kernel | bandwidth_system`
+- Evidence for selected route:
+- Why the other route is weaker:
+- If `compute_operator_kernel`, why the operator/kernel accounts for enough
+  end-to-end time to justify switching to `/home/liuxu/projects/AKO4ALL`:
+- If not `compute_operator_kernel`, why a local kernel/operator loop is not the
+  first tool and why MobileMoE should continue exploring bandwidth/system
+  runtime boundaries:
+- Falsification condition for this route:
 
 ## Boundary Definition
 
@@ -140,7 +227,51 @@ Required:
 - Effect lifetime or invalidation path:
 - How this affects later materialization/upload/compute/synchronization:
 
-### 6. Expected Metric Movement
+### 6. State/Resource Consistency Audit
+
+TBD
+
+If the profile contains facts about physical actions, logical requests,
+resource coverage, reuse, invalidation, eviction, phase reset, or later
+accesses, explain them before choosing a patch. This section is generic: use
+the profile's own resource IDs and logical request IDs, not adapter-specific
+assumptions.
+
+Required:
+
+- Observed physical resources or actions:
+- Logical requests covered by those resources/actions:
+- Later covered requests: hit, miss, repeated work, or unknown:
+- Observed invalidation/eviction/overwrite/phase reset before later misses:
+- Code sites that write physical/resource state:
+- Code sites that write logical/request state:
+- Code sites that decide reuse versus rematerialization/reupload/recompute:
+- If choosing another boundary, why this state/resource relation is lower
+  priority:
+- Metrics or events that should move if this relation is the real boundary:
+
+### 7. Minimal Intervention Audit
+
+TBD
+
+List the plausible control surfaces for this boundary before choosing a patch.
+The goal is not to prefer small patches forever; the goal is to test the
+causal hypothesis with the smallest sufficient intervention before changing a
+heavier execution path.
+
+Required:
+
+- Physical action surface:
+- Dispatch/execution owner surface:
+- Metadata/state accounting surface:
+- Lifetime/invalidation surface:
+- Smallest surface that can test the hypothesis:
+- Why this surface preserves semantics and the existing execution path when
+  possible:
+- If choosing a heavier surface, why lighter surfaces cannot test the
+  hypothesis:
+
+### 8. Expected Metric Movement
 
 TBD
 
@@ -153,7 +284,7 @@ Required:
 - Supporting diagnostic metrics expected direction:
 - Guardrails that must not regress:
 
-### 7. Falsification Condition
+### 9. Falsification Condition
 
 TBD
 
@@ -167,6 +298,13 @@ Required:
 - Reject if physical-cost metrics:
 - Reject if supporting diagnostics:
 - Treat as inconclusive if:
+
+## Adapter-Specific State/Resource Facts
+
+These facts are copied from `mobile_profile.json` to make state/resource
+relations visible. They are profiling facts, not a diagnosis.
+
+{state_facts_text}
 
 ## Pre-Patch Rule
 

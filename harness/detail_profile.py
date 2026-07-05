@@ -15,6 +15,15 @@ from typing import Any
 ANSI_RE = re.compile(r"\x1b\[[0-9;:]*m")
 HYBRID_COLD_RE = re.compile(r"\[TD-RUN\]\[hybrid-cold\]\s*(.*)")
 KV_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)=([^\s]+)")
+QNN_PRELOAD_RE = re.compile(
+    r"QNNBackend::preloadContextAsync '([^']+)'\s+slot=(\d+)\s+retrieveContext\s+(enter|done)(?:\s+ok=(\w+))?"
+)
+QNN_ACTIVATE_RE = re.compile(r"QNNBackend::activatePreloadedContext '([^']+)':\s*(.*)")
+QNN_LOAD_BEGIN_RE = re.compile(r"QNNBackend::loadContext begin path=([^\s]+)")
+QNN_LOAD_SATISFIED_RE = re.compile(
+    r"QNNBackend::loadContext '([^']+)'\s+satisfied by async preloaded context"
+)
+LM_HEAD_RE = re.compile(r"External lm_head\s*:\s*(.*)")
 
 
 def parse_value(raw: str) -> int | float | str:
@@ -86,12 +95,152 @@ def parse_hybrid_cold_log(path: Path | None) -> list[dict[str, Any]]:
     return rows
 
 
+def parse_qnn_context_log(path: Path | None) -> list[dict[str, Any]]:
+    if path is None or not path.exists():
+        return []
+    events: list[dict[str, Any]] = []
+    for lineno, raw_line in enumerate(
+        path.read_text(encoding="utf-8", errors="replace").splitlines(), start=1
+    ):
+        line = ANSI_RE.sub("", raw_line)
+
+        preload = QNN_PRELOAD_RE.search(line)
+        if preload:
+            context_path, slot, state, ok = preload.groups()
+            events.append(
+                {
+                    "line": lineno,
+                    "event": "preload_retrieve",
+                    "context": context_path,
+                    "slot": int(slot),
+                    "stage": state,
+                    "state": state,
+                    "ok": ok,
+                }
+            )
+            continue
+
+        activate = QNN_ACTIVATE_RE.search(line)
+        if activate:
+            context_path, detail = activate.groups()
+            event: dict[str, Any] = {
+                "line": lineno,
+                "event": "activate",
+                "context": context_path,
+                "detail": detail,
+            }
+            if "find slot done" in detail:
+                event["stage"] = "find_slot"
+                if m := re.search(
+                    r"us=(\d+)\s+slot=(-?\d+)\s+wait_joinable=(\d+)", detail
+                ):
+                    event["us"] = int(m.group(1))
+                    event["slot"] = int(m.group(2))
+                    event["wait_joinable"] = int(m.group(3))
+            elif "wait preload thread enter" in detail:
+                event["stage"] = "wait_preload_enter"
+            elif "wait preload thread done" in detail:
+                event["stage"] = "wait_preload"
+                if m := re.search(r"us=(\d+)", detail):
+                    event["us"] = int(m.group(1))
+            elif "extract preloaded context done" in detail:
+                event["stage"] = "extract_preloaded"
+                if m := re.search(r"us=(\d+)\s+models=(\d+)", detail):
+                    event["us"] = int(m.group(1))
+                    event["models"] = int(m.group(2))
+            elif "clearRegisteredMemHandles enter" in detail:
+                event["stage"] = "clear_registered_enter"
+            elif "clearRegisteredMemHandles done" in detail:
+                event["stage"] = "clear_registered"
+                if m := re.search(r"us=(\d+)", detail):
+                    event["us"] = int(m.group(1))
+            elif "contextFree enter" in detail:
+                event["stage"] = "context_free_enter"
+            elif "contextFree done" in detail:
+                event["stage"] = "context_free"
+                if m := re.search(r"us=(\d+)", detail):
+                    event["us"] = int(m.group(1))
+            elif "rebuild graph map done" in detail:
+                event["stage"] = "rebuild_graph_map"
+                if m := re.search(r"us=(\d+)\s+entries=(\d+)", detail):
+                    event["us"] = int(m.group(1))
+                    event["entries"] = int(m.group(2))
+            elif "setQNNPointer done" in detail:
+                event["stage"] = "set_qnn_pointer"
+                if m := re.search(r"us=(\d+)", detail):
+                    event["us"] = int(m.group(1))
+            elif "activated with" in detail:
+                event["stage"] = "activated"
+            elif "total done" in detail:
+                event["stage"] = "total"
+                if m := re.search(r"us=(\d+)", detail):
+                    event["us"] = int(m.group(1))
+            else:
+                event["stage"] = "other"
+            events.append(event)
+            continue
+
+        load_begin = QNN_LOAD_BEGIN_RE.search(line)
+        if load_begin:
+            events.append(
+                {
+                    "line": lineno,
+                    "event": "load_context",
+                    "stage": "begin",
+                    "context": load_begin.group(1).strip("'\""),
+                }
+            )
+            continue
+
+        load_satisfied = QNN_LOAD_SATISFIED_RE.search(line)
+        if load_satisfied:
+            events.append(
+                {
+                    "line": lineno,
+                    "event": "load_context",
+                    "stage": "satisfied_by_async_preload",
+                    "context": load_satisfied.group(1),
+                }
+            )
+    return events
+
+
+def parse_lm_head_log(path: Path | None) -> list[dict[str, Any]]:
+    if path is None or not path.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    for raw_line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = ANSI_RE.sub("", raw_line)
+        match = LM_HEAD_RE.search(line)
+        if not match:
+            continue
+        row: dict[str, Any] = {}
+        for key, raw_value in KV_RE.findall(match.group(1)):
+            value = parse_value(raw_value)
+            if isinstance(value, (int, float)) and math.isfinite(float(value)):
+                row[key] = value
+        if row:
+            rows.append(row)
+    return rows
+
+
 def top_items(groups: dict[str, dict[str, Any]], sort_key: str, limit: int) -> list[dict[str, Any]]:
     return sorted(
         groups.values(),
         key=lambda item: (num(item.get(sort_key)), num(item.get("bytes")), str(item.get("key"))),
         reverse=True,
     )[:limit]
+
+
+def summary_stats(values: list[float]) -> dict[str, float | int | None]:
+    if not values:
+        return {"count": 0, "sum": None, "mean": None, "max": None}
+    return {
+        "count": len(values),
+        "sum": sum(values),
+        "mean": sum(values) / len(values),
+        "max": max(values),
+    }
 
 
 def add_event(group: dict[str, Any], event: dict[str, Any]) -> None:
@@ -272,9 +421,172 @@ def summarize_hybrid_layers(rows: list[dict[str, Any]], limit: int) -> dict[str,
     }
 
 
+def summarize_qnn_context_timeline(
+    events: list[dict[str, Any]], limit: int
+) -> dict[str, Any]:
+    if not events:
+        return {"available": False, "events": 0}
+
+    by_stage_us: dict[str, list[float]] = defaultdict(list)
+    by_context: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {"events": 0, "us_total": 0.0}
+    )
+    counts = Counter()
+    slots = Counter()
+
+    for event in events:
+        name = event_key(event, "event")
+        stage = event_key(event, "stage")
+        context = event_key(event, "context")
+        counts[f"{name}:{stage}"] += 1
+        if event.get("slot") is not None:
+            slots[str(event.get("slot"))] += 1
+        us = num(event.get("us"))
+        if event.get("us") is not None:
+            by_stage_us[stage].append(us)
+        if context != "unknown":
+            group = by_context[context]
+            group["key"] = context
+            group["context"] = context
+            group["events"] = int(group.get("events", 0)) + 1
+            group["us_total"] = num(group.get("us_total")) + us
+            if stage != "unknown":
+                group[f"stage_{stage}"] = int(group.get(f"stage_{stage}", 0)) + 1
+                if event.get("us") is not None:
+                    group[f"us_{stage}"] = num(group.get(f"us_{stage}")) + us
+
+    stage_summary = {
+        stage: summary_stats(values)
+        for stage, values in sorted(by_stage_us.items())
+    }
+    top_contexts = sorted(
+        by_context.values(),
+        key=lambda item: (num(item.get("us_total")), int(item.get("events", 0))),
+        reverse=True,
+    )[:limit]
+
+    return {
+        "available": True,
+        "events": len(events),
+        "event_stage_counts": dict(sorted(counts.items())),
+        "slot_event_counts": dict(sorted(slots.items())),
+        "stage_us": stage_summary,
+        "top_contexts_by_us": top_contexts,
+    }
+
+
+def summarize_async_overlap(events: list[dict[str, Any]]) -> dict[str, Any]:
+    if not events:
+        return {"available": False, "events": 0}
+
+    preload_enter = Counter()
+    preload_done = Counter()
+    load_begin = Counter()
+    load_satisfied = Counter()
+    wait_joinable = Counter()
+    wait_us: list[float] = []
+    total_us: list[float] = []
+    blocked_contexts: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {"wait_events": 0, "wait_us": 0.0}
+    )
+
+    for event in events:
+        context = event_key(event, "context")
+        name = event_key(event, "event")
+        stage = event_key(event, "stage")
+        if name == "preload_retrieve" and event.get("state") == "enter":
+            preload_enter[context] += 1
+        elif name == "preload_retrieve" and event.get("state") == "done":
+            preload_done[context] += 1
+        elif name == "load_context" and stage == "begin":
+            load_begin[context] += 1
+        elif name == "load_context" and stage == "satisfied_by_async_preload":
+            load_satisfied[context] += 1
+        elif stage == "find_slot":
+            wait_joinable[str(event.get("wait_joinable", "unknown"))] += 1
+        elif stage == "wait_preload":
+            us = num(event.get("us"))
+            wait_us.append(us)
+            if context != "unknown":
+                blocked = blocked_contexts[context]
+                blocked["key"] = context
+                blocked["context"] = context
+                blocked["wait_events"] = int(blocked.get("wait_events", 0)) + 1
+                blocked["wait_us"] = num(blocked.get("wait_us")) + us
+        elif stage == "total":
+            total_us.append(num(event.get("us")))
+
+    contexts = sorted(
+        set(preload_enter) | set(preload_done) | set(load_begin) | set(load_satisfied)
+    )
+    by_context = []
+    for context in contexts:
+        by_context.append(
+            {
+                "context": context,
+                "preload_enter": preload_enter.get(context, 0),
+                "preload_done": preload_done.get(context, 0),
+                "load_begin": load_begin.get(context, 0),
+                "load_satisfied_by_async": load_satisfied.get(context, 0),
+                "preload_done_without_satisfied_load": max(
+                    0, preload_done.get(context, 0) - load_satisfied.get(context, 0)
+                ),
+            }
+        )
+
+    top_blocked = sorted(
+        blocked_contexts.values(),
+        key=lambda item: (num(item.get("wait_us")), int(item.get("wait_events", 0))),
+        reverse=True,
+    )[:12]
+
+    return {
+        "available": True,
+        "events": len(events),
+        "contexts": len(contexts),
+        "wait_joinable_counts": dict(sorted(wait_joinable.items())),
+        "wait_preload_us": summary_stats(wait_us),
+        "activate_total_us": summary_stats(total_us),
+        "by_context": by_context[:24],
+        "top_blocking_contexts_by_wait_us": top_blocked,
+    }
+
+
+def summarize_lm_head_timeline(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    if not rows:
+        return {"available": False, "records": 0}
+
+    numeric_keys = sorted({key for row in rows for key in row})
+    totals: dict[str, float] = {}
+    means: dict[str, float] = {}
+    maxima: dict[str, float] = {}
+    for key in numeric_keys:
+        values = [num(row.get(key)) for row in rows if key in row]
+        if not values:
+            continue
+        totals[key] = sum(values)
+        means[key] = sum(values) / len(values)
+        maxima[key] = max(values)
+
+    time_keys = ["upload", "kernel", "read", "total"]
+    mib_keys = ["weight_up", "input_up", "read"]
+    return {
+        "available": True,
+        "records": len(rows),
+        "totals": totals,
+        "means": means,
+        "maxima": maxima,
+        "time_ms_totals": {key: totals[key] for key in time_keys if key in totals},
+        "data_mib_totals": {key: totals[key] for key in mib_keys if key in totals},
+        "latest": rows[-1],
+    }
+
+
 def build_detail_profile(
     events: list[dict[str, Any]],
     hybrid_rows: list[dict[str, Any]],
+    qnn_events: list[dict[str, Any]],
+    lm_head_rows: list[dict[str, Any]],
     label: str,
     limit: int,
 ) -> dict[str, Any]:
@@ -283,6 +595,9 @@ def build_detail_profile(
         "profile_kind": "generic_runtime_event_detail_profile",
         "harness_role": "facts_only_ranked_hotspots_no_bottleneck_decision",
         "runtime_event_profile": summarize_events(events, limit),
+        "qnn_context_timeline": summarize_qnn_context_timeline(qnn_events, limit),
+        "lm_head_timeline": summarize_lm_head_timeline(lm_head_rows),
+        "async_overlap_profile": summarize_async_overlap(qnn_events),
         "adapter_specific_appendix": {
             "mobile_moe_event_breakdown": summarize_adapter_event_appendix(events, limit),
             "mobile_moe_layer_breakdown": summarize_hybrid_layers(hybrid_rows, limit),
@@ -290,6 +605,8 @@ def build_detail_profile(
         "missing_observations": {
             "state_trace_jsonl": [] if events else ["state_trace_jsonl"],
             "decode_hybrid_layer_log": [] if hybrid_rows else ["decode_hybrid_layer_log"],
+            "qnn_context_log": [] if qnn_events else ["qnn_context_log"],
+            "lm_head_summary": [] if lm_head_rows else ["lm_head_summary"],
         },
     }
 
@@ -305,7 +622,11 @@ def main() -> None:
 
     events = read_jsonl(args.state_trace)
     hybrid_rows = parse_hybrid_cold_log(args.log)
-    report = build_detail_profile(events, hybrid_rows, args.label, args.limit)
+    qnn_events = parse_qnn_context_log(args.log)
+    lm_head_rows = parse_lm_head_log(args.log)
+    report = build_detail_profile(
+        events, hybrid_rows, qnn_events, lm_head_rows, args.label, args.limit
+    )
     text = json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True)
     print(text)
     if args.out:

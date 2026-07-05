@@ -10,13 +10,15 @@ The target is not one isolated kernel. The target is the runtime behavior around
 model execution, data movement, caching, materialization, scheduling, and
 heterogeneous execution.
 
-The current default workflow is profiler-first:
+The current default workflow is a simple compute-vs-bandwidth triage followed
+by profiler-first exploration:
 
 ```text
 baseline benchmark
   -> trace extraction
   -> detail profile
   -> facts-only profile report
+  -> compute-vs-bandwidth triage
   -> empty boundary form
   -> agent fills causal boundary from profile facts and code inspection
   -> one coherent runtime patch
@@ -25,9 +27,12 @@ baseline benchmark
   -> commit or archive
 ```
 
-The harness provides facts and validation. The agent chooses the boundary and
-the hypothesis. Do not use fixed bottleneck categories or pre-baked cause
-labels as the default reasoning path.
+The harness provides facts, a coarse route decision, and validation. If the
+profile is compute/operator-bound, switch to the original AKO4ALL workflow in
+`/home/liuxu/projects/AKO4ALL`. If the profile is bandwidth/system-bound, stay
+in the MobileMoE profiler-first harness and let the agent choose the concrete
+runtime boundary from profile facts. Do not use pre-baked cause labels or
+known-case answers as the default reasoning path.
 
 ## Scope
 
@@ -39,12 +44,17 @@ Use this skill for:
 - Harness-mediated optimization experiments.
 - Iteration logs, failed-patch archives, and best-version selection.
 
-Do not use it for:
+Do not use this skill itself to perform:
 
 - Single CUDA/Triton/TileLang kernel optimization.
 - A one-off code review with no benchmark loop.
 - Changing benchmark, parser, prompt, dataset, or correctness semantics unless
   the user explicitly changes the experiment contract.
+
+If profiling shows the active bottleneck is an isolated compute/operator kernel,
+use this skill only to record the triage decision. Then switch to the original
+AKO4ALL workflow in `/home/liuxu/projects/AKO4ALL` for the kernel/operator
+itself instead of forcing a whole-system runtime patch loop.
 
 ## First Action
 
@@ -111,9 +121,14 @@ Prefer the reusable scaffold in `/home/liuxu/projects/mobile-moe-ako`:
 - `harness/extract_state_trace.py`: extracts `[TD-RES-TRACE]` JSON events from
   runtime logs into `state_trace.jsonl` and `state_trace_summary.json`.
 - `harness/detail_profile.py`: builds generic runtime-event hotspot tables from
-  sampled events and logs.
+  sampled events and logs, including residency events, QNN context timeline,
+  lm_head timing, and async preload/activation overlap facts when those logs are
+  present.
 - `harness/profile_report.py`: builds facts-only `mobile_profile.json` from
   metrics, trace summaries, detail profile, and manifest.
+- A manually filled triage section in `boundary_form.md`: records whether the
+  profile is compute/operator-bound or bandwidth/system-bound from measured
+  profile facts. This is a coarse router, not a patch diagnosis.
 - `harness/boundary_template.py`: writes `boundary_form.md`, an empty causal
   form the agent must fill before patching.
 - `harness/classify_result.py`: acceptance gate for a candidate patch. It emits
@@ -170,7 +185,38 @@ From the baseline run directory, generate:
 The profile report is facts-only. It should expose observations and missing
 observations, not choose an optimization direction.
 
-### 4. Fill The Boundary Form Before Patching
+### 4. Triage Compute Versus Bandwidth/System
+
+Before choosing a patch surface, perform a coarse bottleneck triage from
+`mobile_profile.json`, `detail_profile.json`, and the benchmark manifest.
+
+The triage must answer:
+
+1. Is the profile primarily `compute_operator_kernel` or `bandwidth_system`?
+2. Which concrete profile fields and values support that choice?
+3. Why is the other route weaker for the current run?
+4. What evidence would falsify this route choice?
+
+Use only these route names:
+
+- `compute_operator_kernel`: a single operator/kernel dominates enough of the
+  end-to-end runtime that local kernel speedup can plausibly move the primary
+  metric. Do not patch MobileMoE runtime policy first. Switch to the original
+  AKO4ALL workflow in `/home/liuxu/projects/AKO4ALL` for operator/kernel
+  optimization, then use the MobileMoE adapter only for end-to-end validation.
+- `bandwidth_system`: the bottleneck is not an isolated compute kernel, or the
+  profile points to bytes moved, upload/download, page-touch, materialization,
+  synchronization/wait, cache/residency, logical/physical resource state, QNN
+  context, async overlap, or other whole-system runtime costs. Stay in the
+  MobileMoE profiler-first harness. Do not subdivide this route into fixed
+  subcategories; let the agent choose the concrete runtime boundary from the
+  profile and code inspection.
+
+This triage is deliberately coarse. It only decides whether to use original
+AKO4ALL for compute-bound operator work or MobileMoE-AKO for bandwidth/system
+runtime exploration.
+
+### 5. Fill The Boundary Form Before Patching
 
 Before editing runtime code, fill `boundary_form.md` or copy its completed
 content into `ITERATIONS.md`.
@@ -182,25 +228,44 @@ The agent must answer from profile facts and code inspection:
 3. Physical-vs-logical distinction.
 4. Target files/functions/states to inspect.
 5. State transition or execution hypothesis.
-6. Expected metric movement.
-7. Falsification condition.
+6. State/resource consistency audit when the profile exposes physical actions,
+   logical requests, resource coverage, reuse, invalidation, eviction, phase
+   reset, or later accesses.
+7. Minimal intervention audit: list plausible physical-action,
+   dispatch/execution-owner, metadata/state-accounting, and
+   lifetime/invalidation control surfaces. Choose the smallest surface that can
+   test the hypothesis while preserving semantics and the existing execution
+   path when possible. If choosing a heavier surface, explain why lighter
+   surfaces cannot test the hypothesis.
+8. Expected metric movement.
+9. Falsification condition.
 
 The form is intentionally open. It must not provide candidate bottleneck
 answers. If the evidence is insufficient, run a diagnostic-only iteration rather
 than a speculative optimization patch.
 
-### 5. Make One Coherent Runtime Patch
+### 6. Make One Coherent Patch In The Selected Route
 
-Each optimization iteration should change one runtime-policy idea only. Keep
-benchmark semantics, parser semantics, prompt set, decode length, correctness
-checks, and generated-token accounting unchanged.
+Each optimization iteration should change one idea only. Keep benchmark
+semantics, parser semantics, prompt set, decode length, correctness checks, and
+generated-token accounting unchanged.
 
-Allowed surfaces are normally runtime policy, cache/resource state,
-materialization, scheduling, execution placement, or operator implementation
-code inside the runtime repo. If the needed edit is outside that surface, ask or
-record the contract change.
+Prefer the smallest sufficient runtime intervention for the current hypothesis
+before changing heavier execution ownership or dispatch paths. Smallest
+sufficient does not mean lowest possible speedup; it means the patch should
+test the causal boundary without introducing extra behavior changes that make
+the result hard to interpret. After the hypothesis is validated, later
+iterations may broaden or tune the implementation for larger effect.
 
-### 6. Run Candidate Through The Same Adapter
+Allowed MobileMoE bandwidth/system surfaces are normally runtime policy,
+cache/resource state, materialization, scheduling, execution placement, transfer
+paths, synchronization, or operator integration code inside the runtime repo.
+If the selected route is `compute_operator_kernel`, the allowed surface shifts
+to the isolated operator/kernel implementation and the original AKO4ALL
+benchmark harness. If the needed edit is outside the selected route's surface,
+ask or record the contract change.
+
+### 7. Run Candidate Through The Same Adapter
 
 If the candidate changed runtime code, build the runner, push it to the phone,
 chmod it, and verify host md5 equals phone md5 before benchmarking. The
@@ -210,6 +275,9 @@ not guarantee that a newly built runner binary was deployed.
 Use the same benchmark profile and trace settings as baseline. Pass
 `--baseline-metrics` when using the adapter. Generate the same trace/profile
 artifacts for the candidate when they are relevant to interpreting the result.
+For `compute_operator_kernel` route, first use the operator-local AKO4ALL
+benchmark to judge the local kernel patch; then use the MobileMoE adapter as
+the end-to-end validation gate.
 
 If a candidate launch fails with `Text file busy`, missing generated tokens, or
 another pre-execution device/deploy error, classify the run as invalid. Do not
@@ -217,7 +285,7 @@ accept or reject the patch as a performance result until the runner has been
 md5-verified on the phone and the exact same adapter command has produced
 comparable metrics.
 
-### 7. Run The Acceptance Gate
+### 8. Run The Acceptance Gate
 
 Run `harness/classify_result.py` with baseline and candidate metrics.
 
@@ -233,7 +301,7 @@ Other metrics should be emitted as deltas or warnings. Let the agent explain
 why they moved in the iteration log; do not encode system-cause categories in
 the verdict.
 
-### 8. Commit Or Archive
+### 9. Commit Or Archive
 
 If accepted, commit the runtime patch with a concise message tied to the
 experiment. If rejected, inconclusive, or invalid, save the patch under:
@@ -245,7 +313,7 @@ patches/failed_attempts/<experiment>_<iteration>.patch
 Then revert only the edits made by that failed attempt. Preserve unrelated user
 changes.
 
-### 9. Log Immediately
+### 10. Log Immediately
 
 Append `ITERATIONS.md` before starting another idea. Include:
 
@@ -254,6 +322,7 @@ Append `ITERATIONS.md` before starting another idea. Include:
 - Metrics path.
 - Profile artifacts path.
 - Filled boundary summary.
+- Compute-vs-bandwidth triage decision.
 - Files inspected and modified.
 - Patch hypothesis.
 - Acceptance verdict and metric deltas.
@@ -274,6 +343,11 @@ Good diagnostic targets are generic runtime observations:
 - Queue/enqueue/finish/wait timing.
 - Event-level state/resource lifetime.
 - Logical request vs physical action mapping.
+- QNN context preload/activation timing, including wait, cleanup, context-free,
+  graph-map rebuild, and async-satisfied load facts.
+- lm_head upload/kernel/readback timing.
+- Runtime async overlap facts, including preload enter/done, load satisfied by
+  async preload, and activation wait time.
 - Thermal and provenance comparability.
 
 Diagnostic iterations are not speedup wins. Mark them as diagnostic-only, log
