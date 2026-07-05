@@ -11,6 +11,9 @@ results/*.jsonl
 reports/
 results/k1_lmhead/
 results/k2_fine_core_gemv/
+ITERATIONS.md
+iterations/backups/
+patches/failed_attempts/*.patch
 iterations/k1_*.md
 iterations/k2_*.md
 patches/failed_attempts/k1_*
