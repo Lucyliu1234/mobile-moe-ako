@@ -14,6 +14,7 @@ from typing import Any
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;:]*m")
 HYBRID_COLD_RE = re.compile(r"\[TD-RUN\]\[hybrid-cold\]\s*(.*)")
+DS2_HYBRID_COLD_RE = re.compile(r"\[DS2-TD\]\[hybrid-cold-core-breakdown\]\s*(.*)")
 KV_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)=([^\s]+)")
 QNN_PRELOAD_RE = re.compile(
     r"QNNBackend::preloadContextAsync '([^']+)'\s+slot=(\d+)\s+retrieveContext\s+(enter|done)(?:\s+ok=(\w+))?"
@@ -83,7 +84,13 @@ def parse_hybrid_cold_log(path: Path | None) -> list[dict[str, Any]]:
         if "[TD-RUN][debug] generate: prefill done" in line:
             in_decode_phase = True
         match = HYBRID_COLD_RE.search(line)
-        if not (in_decode_phase and match):
+        source = "qwen2_td_run_hybrid_cold"
+        if match and not in_decode_phase:
+            continue
+        if not match:
+            match = DS2_HYBRID_COLD_RE.search(line)
+            source = "ds2_td_hybrid_cold_core_breakdown"
+        if not match:
             continue
         row: dict[str, Any] = {}
         for key, raw_value in KV_RE.findall(match.group(1)):
@@ -91,8 +98,16 @@ def parse_hybrid_cold_log(path: Path | None) -> list[dict[str, Any]]:
             if isinstance(value, (int, float)) and math.isfinite(float(value)):
                 row[key] = value
         if row:
+            row["_source"] = source
             rows.append(row)
     return rows
+
+
+def first_num(row: dict[str, Any], *keys: str) -> float:
+    for key in keys:
+        if key in row:
+            return num(row.get(key))
+    return 0.0
 
 
 def parse_qnn_context_log(path: Path | None) -> list[dict[str, Any]]:
@@ -368,6 +383,8 @@ def summarize_hybrid_layers(rows: list[dict[str, Any]], limit: int) -> dict[str,
         return {"available": False, "layers": 0}
 
     by_layer: dict[str, dict[str, Any]] = defaultdict(dict)
+    totals: dict[str, float] = defaultdict(float)
+    source_counts: Counter[str] = Counter()
     numeric_keys = [
         "total_ms",
         "gpu_total_ms",
@@ -399,8 +416,40 @@ def summarize_hybrid_layers(rows: list[dict[str, Any]], limit: int) -> dict[str,
             continue
         group = by_layer.setdefault(layer, {"key": layer, "layer": row.get("layer"), "records": 0})
         group["records"] = int(group.get("records", 0)) + 1
+        normalized = {
+            "total_ms": first_num(row, "total_ms", "gpu_total_ms"),
+            "gpu_total_ms": first_num(row, "gpu_total_ms"),
+            "core_upload_ms": first_num(row, "core_upload_ms", "req_mat_ms"),
+            "factor_upload_ms": first_num(row, "factor_upload_ms"),
+            "input_upload_ms": first_num(row, "input_upload_ms"),
+            "meta_ms": first_num(row, "meta_ms"),
+            "download_ms": first_num(row, "download_ms", "out_download"),
+            "kernel_ms": first_num(row, "kernel_ms", "kernel_total_ms"),
+            "req_service_ms": first_num(row, "req_service_ms"),
+            "req_page_touch_ms": first_num(row, "req_page_touch_ms"),
+            "req_mat_enqueue_ms": first_num(row, "req_mat_enqueue_ms"),
+            "req_mat_finish_ms": first_num(row, "req_mat_finish_ms"),
+            "core_upload_mib": first_num(row, "core_upload_mib", "req_mat_mib"),
+            "factor_upload_mib": first_num(row, "factor_upload_mib"),
+            "input_upload_mib": first_num(row, "input_upload_mib"),
+            "download_mib": first_num(row, "download_mib"),
+            "req_page_touch_mib": first_num(row, "req_page_touch_mib"),
+            "req_mat_writes": first_num(row, "req_mat_writes", "core_upload_writes"),
+            "req_miss": first_num(row, "req_miss", "misses"),
+            "req_hit": first_num(row, "req_hit", "hits"),
+            "evict": first_num(row, "evict"),
+            "res_upload": first_num(row, "res_upload"),
+            "res_dup_upload": first_num(row, "res_dup_upload"),
+        }
         for key in numeric_keys:
-            group[key] = num(group.get(key)) + num(row.get(key))
+            value = normalized.get(key, 0.0)
+            group[key] = num(group.get(key)) + value
+            totals[key] += value
+        source = row.get("_source")
+        if source:
+            source_key = f"source_{source}"
+            group[source_key] = int(group.get(source_key, 0)) + 1
+            source_counts[str(source)] += 1
 
     def top(sort_key: str) -> list[dict[str, Any]]:
         return sorted(
@@ -413,6 +462,8 @@ def summarize_hybrid_layers(rows: list[dict[str, Any]], limit: int) -> dict[str,
         "available": True,
         "layers": len(by_layer),
         "records": len(rows),
+        "totals": dict(sorted(totals.items())),
+        "source_counts": dict(sorted(source_counts.items())),
         "top_layers_by_total_ms": top("total_ms"),
         "top_layers_by_core_upload_ms": top("core_upload_ms"),
         "top_layers_by_page_touch_ms": top("req_page_touch_ms"),

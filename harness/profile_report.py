@@ -42,6 +42,70 @@ def build_report(
     detail_profile: dict[str, Any],
     label: str,
 ) -> dict[str, Any]:
+    layer_breakdown = (
+        detail_profile.get("adapter_specific_appendix", {})
+        .get("mobile_moe_layer_breakdown", {})
+    )
+    layer_totals = (
+        layer_breakdown.get("totals", {})
+        if isinstance(layer_breakdown, dict)
+        else {}
+    )
+    detail_rollup = {
+        "available": bool(layer_totals),
+        "source": "detail_profile.adapter_specific_appendix.mobile_moe_layer_breakdown.totals",
+        "operator_timing_ms": pick(
+            layer_totals,
+            [
+                "total_ms",
+                "gpu_total_ms",
+                "kernel_ms",
+                "meta_ms",
+                "download_ms",
+            ],
+        ),
+        "transfer_mib": pick(
+            layer_totals,
+            [
+                "core_upload_mib",
+                "factor_upload_mib",
+                "input_upload_mib",
+                "download_mib",
+                "req_page_touch_mib",
+            ],
+        ),
+        "upload_attribution_ms": pick(
+            layer_totals,
+            [
+                "core_upload_ms",
+                "factor_upload_ms",
+                "input_upload_ms",
+                "download_ms",
+                "req_mat_enqueue_ms",
+                "req_mat_finish_ms",
+            ],
+        ),
+        "materialization_service": pick(
+            layer_totals,
+            [
+                "req_service_ms",
+                "req_page_touch_ms",
+                "req_mat_enqueue_ms",
+                "req_mat_finish_ms",
+                "req_mat_writes",
+                "req_miss",
+                "req_hit",
+                "evict",
+            ],
+        ),
+        "residency": pick(
+            layer_totals,
+            [
+                "res_upload",
+                "res_dup_upload",
+            ],
+        ),
+    }
     required_metrics = [
         "decode_tok_s",
         "mib_per_token",
@@ -256,6 +320,7 @@ def build_report(
                     ],
                 ),
             },
+            "detail_profile_rollup": detail_rollup,
             "qnn_context_timeline": {
                 "available": bool(detail_profile.get("qnn_context_timeline")),
                 **(

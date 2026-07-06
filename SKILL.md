@@ -231,12 +231,17 @@ The agent must answer from profile facts and code inspection:
 6. State/resource consistency audit when the profile exposes physical actions,
    logical requests, resource coverage, reuse, invalidation, eviction, phase
    reset, or later accesses.
-7. Minimal intervention audit: list plausible physical-action,
-   dispatch/execution-owner, metadata/state-accounting, and
-   lifetime/invalidation control surfaces. Choose the smallest surface that can
-   test the hypothesis while preserving semantics and the existing execution
-   path when possible. If choosing a heavier surface, explain why lighter
-   surfaces cannot test the hypothesis.
+7. Mechanism-first intervention audit: list plausible control surfaces for the
+   selected boundary, including but not limited to physical action,
+   execution/dispatch owner, scheduling/overlap, resource lifetime,
+   metadata/state accounting, memory layout/allocation, kernel/operator
+   integration, and telemetry/provenance. Choose the intervention that most
+   directly tests the causal hypothesis while keeping the result interpretable
+   and benchmark semantics unchanged. Do not prefer a smaller text diff when it
+   only changes a knob or weakly probes the mechanism. If choosing a narrower
+   probe, explain what mechanism it isolates. If choosing a broader
+   mechanism-level change, explain why the broader change is necessary and what
+   metrics would distinguish success from collateral effects.
 8. Expected metric movement.
 9. Falsification condition.
 
@@ -244,18 +249,49 @@ The form is intentionally open. It must not provide candidate bottleneck
 answers. If the evidence is insufficient, run a diagnostic-only iteration rather
 than a speculative optimization patch.
 
+When listing control surfaces, use the following generic whole-system runtime
+map as prompts for inspection, not as fixed answers:
+
+- Physical action: upload, download, materialization, page touch, memcpy,
+  mmap/madvise, buffer write/read.
+- Execution/dispatch owner: CPU/GPU/QNN placement, subgraph owner, packed versus
+  unpacked path, synchronous versus async path.
+- Scheduling/overlap: preload timing, queue depth, async admission, activation
+  wait, finish/wait placement, context switch timing.
+- Resource lifetime: cache residency, eviction, invalidation, pin/protect
+  lifetime, phase reset, arena reuse.
+- Metadata/state accounting: logical versus physical state, coverage records,
+  hit/miss bookkeeping, stable keys, duplicate detection.
+- Memory layout/allocation: buffer pooling, allocation reuse, arena capacity,
+  span coalescing, alignment, fragmentation.
+- Kernel/operator integration: launch shape, local size, quant block handling,
+  auxiliary upload/readback, host-device boundary.
+- Telemetry/logging/provenance: use as diagnostic instrumentation unless the
+  profile shows measurable overhead.
+
 ### 6. Make One Coherent Patch In The Selected Route
 
 Each optimization iteration should change one idea only. Keep benchmark
 semantics, parser semantics, prompt set, decode length, correctness checks, and
 generated-token accounting unchanged.
 
-Prefer the smallest sufficient runtime intervention for the current hypothesis
-before changing heavier execution ownership or dispatch paths. Smallest
-sufficient does not mean lowest possible speedup; it means the patch should
-test the causal boundary without introducing extra behavior changes that make
-the result hard to interpret. After the hypothesis is validated, later
-iterations may broaden or tune the implementation for larger effect.
+Prefer a mechanism-level runtime intervention that directly tests the current
+hypothesis while keeping the result interpretable. Do not optimize for the
+smallest text diff when a slightly broader mechanism-level change would test
+the causal boundary more clearly. The patch should avoid unrelated behavior
+changes that make the result hard to interpret. After the hypothesis is
+validated, later iterations may broaden or tune the implementation for larger
+effect.
+
+Avoid treating constant-only changes as mechanism patches. A patch that only
+changes a numeric default, capacity, threshold, slot count, lookahead, memory
+budget, batch cap, or enable flag is allowed as a diagnostic probe only when
+the boundary form says what mechanism it is probing and what observation would
+confirm or falsify it. If such a probe produces a signal, the next iteration
+must either convert that signal into a mechanism-level runtime policy or run a
+diagnostic-only iteration to measure the missing mechanism. Do not continue
+sweeping nearby numeric values unless the user explicitly asks for parameter
+tuning.
 
 Allowed MobileMoE bandwidth/system surfaces are normally runtime policy,
 cache/resource state, materialization, scheduling, execution placement, transfer

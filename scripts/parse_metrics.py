@@ -75,6 +75,59 @@ def avg_any(rows: list[dict[str, Any]], *keys: str) -> float | None:
     return mean(vals) if vals else None
 
 
+def with_derived_aliases(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        derived = dict(row)
+
+        def set_if_number(dst: str, src: str, scale: float = 1.0) -> None:
+            if dst in derived and number(derived.get(dst)) is not None:
+                return
+            value = number(row.get(src))
+            if value is not None:
+                derived[dst] = value * scale
+
+        bytes_to_mib = 1.0 / (1024.0 * 1024.0)
+        us_to_ms = 1.0 / 1000.0
+
+        # DS2 fixed100 emits metric_* fields rather than the Qwen2
+        # decode_hybrid_* names.  Keep these as low-priority aliases so Qwen2
+        # parsing remains controlled by the existing fields.
+        set_if_number("metric_core_upload_mib", "metric_core_upload_bytes", bytes_to_mib)
+        set_if_number(
+            "metric_required_materialize_mib",
+            "metric_required_materialize_bytes",
+            bytes_to_mib,
+        )
+        set_if_number(
+            "metric_core_upload_mib_per_token",
+            "metric_core_upload_bytes_per_token",
+            bytes_to_mib,
+        )
+        set_if_number(
+            "metric_required_materialize_mib_per_token",
+            "metric_required_materialize_bytes_per_token",
+            bytes_to_mib,
+        )
+        set_if_number(
+            "metric_required_miss_service_ms",
+            "metric_required_miss_service_us",
+            us_to_ms,
+        )
+        set_if_number(
+            "metric_required_miss_service_ms_per_token",
+            "metric_required_miss_service_us_per_token",
+            us_to_ms,
+        )
+        set_if_number(
+            "metric_required_materialize_ms",
+            "metric_required_materialize_us",
+            us_to_ms,
+        )
+        out.append(derived)
+    return out
+
+
 def all_correct(rows: list[dict[str, Any]]) -> bool | None:
     if not rows:
         return None
@@ -110,12 +163,14 @@ def load_baseline_decode_tok_s(path: Path | None) -> float | None:
 
 
 def build_metrics(args: argparse.Namespace, rows: list[dict[str, Any]]) -> dict[str, Any]:
+    rows = with_derived_aliases(rows)
     load_mb_total = total_any(
         rows,
         "edgemoe_demand_load_mb",
         "hybrid_core_up",
         "decode_hybrid_core_upload_mib",
         "decode_hybrid_req_mat_mib",
+        "metric_core_upload_mib",
     )
     upload_bytes = load_mb_total * 1024 * 1024 if load_mb_total is not None else None
     generated = total(rows, "generated")
@@ -132,6 +187,7 @@ def build_metrics(args: argparse.Namespace, rows: list[dict[str, Any]]) -> dict[
         "uploaded_expert_mib_per_token_metric",
         "uploaded_expert_mib_per_token_est",
         "overall_uploaded_expert_mib_per_token_metric",
+        "metric_core_upload_mib_per_token",
     )
     if mib_per_token is None and load_mb_total is not None and generated:
         mib_per_token = load_mb_total / generated
@@ -153,6 +209,7 @@ def build_metrics(args: argparse.Namespace, rows: list[dict[str, Any]]) -> dict[
             "edgemoe_demand_misses",
             "hybrid_req_miss",
             "decode_hybrid_req_miss",
+            "metric_required_cache_misses",
         ),
         "upload_bytes": upload_bytes,
         "prewarm_hit_rate": avg_any(
@@ -177,6 +234,7 @@ def build_metrics(args: argparse.Namespace, rows: list[dict[str, Any]]) -> dict[
             "required_miss_service_ms_per_token_est",
             "required_miss_service_ms_per_token_metric",
             "overall_required_miss_service_ms_per_token_metric",
+            "metric_required_miss_service_ms_per_token",
         ),
         "decode_req_page_touch_ms": avg_any(
             rows, "decode_hybrid_req_page_touch_ms", "hybrid_req_page_touch"
@@ -188,7 +246,10 @@ def build_metrics(args: argparse.Namespace, rows: list[dict[str, Any]]) -> dict[
             rows, "decode_hybrid_req_mat_finish_ms", "hybrid_req_mat_finish"
         ),
         "decode_req_service_ms": avg_any(
-            rows, "decode_hybrid_req_service_ms", "hybrid_req_service"
+            rows,
+            "decode_hybrid_req_service_ms",
+            "hybrid_req_service",
+            "metric_required_miss_service_ms",
         ),
         "decode_req_mat_writes": avg_any(
             rows, "decode_hybrid_req_mat_writes", "hybrid_req_mat_writes"
@@ -197,10 +258,16 @@ def build_metrics(args: argparse.Namespace, rows: list[dict[str, Any]]) -> dict[
             rows, "decode_hybrid_req_page_touch_mib", "hybrid_req_page_touch_mib"
         ),
         "decode_core_upload_mib": avg_any(
-            rows, "decode_hybrid_core_upload_mib", "hybrid_core_up"
+            rows,
+            "decode_hybrid_core_upload_mib",
+            "hybrid_core_up",
+            "metric_core_upload_mib",
         ),
         "decode_req_mat_mib": avg_any(
-            rows, "decode_hybrid_req_mat_mib", "hybrid_req_mat_mib"
+            rows,
+            "decode_hybrid_req_mat_mib",
+            "hybrid_req_mat_mib",
+            "metric_required_materialize_mib",
         ),
         "decode_req_payload_mib": avg_any(
             rows, "decode_hybrid_req_payload_mib", "hybrid_req_payload_mib"
@@ -280,8 +347,18 @@ def build_metrics(args: argparse.Namespace, rows: list[dict[str, Any]]) -> dict[
         "upload_attr_mib": avg_any(
             rows, "decode_hybrid_upload_attr_mib", "hybrid_upload_attr_mib"
         ),
-        "decode_req_miss": total_any(rows, "decode_hybrid_req_miss", "hybrid_req_miss"),
-        "decode_req_hit": total_any(rows, "decode_hybrid_req_hit", "hybrid_req_hit"),
+        "decode_req_miss": total_any(
+            rows,
+            "decode_hybrid_req_miss",
+            "hybrid_req_miss",
+            "metric_required_cache_misses",
+        ),
+        "decode_req_hit": total_any(
+            rows,
+            "decode_hybrid_req_hit",
+            "hybrid_req_hit",
+            "metric_required_cache_hits",
+        ),
         "decode_evict": total_any(rows, "decode_hybrid_evict", "hybrid_evictions"),
         "res_probe": total_any(rows, "decode_hybrid_res_probe", "hybrid_res_probe"),
         "res_hit": total_any(rows, "decode_hybrid_res_hit", "hybrid_res_hit"),
